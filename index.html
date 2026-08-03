@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<!-- ⚠️ แก้ชื่อเรื่อง/ชื่อโรงงานตรงนี้ตามหน่วยงานที่ใช้งานจริง -->
+<title>ระบบบันทึกค่า Compressor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    /* โทนสบายตา: ขาวนวล 60% / เลือดหมู 30% / เทาเข้ม 10% */
+    --bg:#F7F3F0;        /* พื้นหลังหลัก ขาวอมครีมนวล ไม่จ้า */
+    --panel:#FFFFFF;      /* พื้นการ์ด/กล่อง */
+    --panel2:#F1EAE6;     /* พื้นช่องกรอกข้อมูล */
+    --border:#E4D9D3;     /* เส้นขอบอ่อน */
+    --text:#33302E;       /* ตัวหนังสือหลัก เทาเข้ม */
+    --muted:#8A7F79;      /* ตัวหนังสือรอง */
+    --accent:#6E1E2B;     /* เลือดหมู - สีหลักของแบรนด์ (หัวข้อ/ปุ่ม/แถบเมนู) */
+    --accent2:#8F303D;    /* เลือดหมูอ่อนลง สำหรับ gradient/hover */
+    --accent-soft:#F3E3E1;/* พื้นอ่อนของสีเลือดหมู ใช้ทำ badge/พื้นเตือน */
+    --dark:#3A3532;       /* เทาเข้ม ใช้กับป้ายพิเศษ (Compound badge) */
+    --dark-soft:#EAE6E3;  /* พื้นอ่อนของเทาเข้ม */
+    --green:#3E7A52;      /* เขียวสำหรับสถานะปกติ */
+    --green-soft:#E4EFE6;
+    --red:#A33B32;        /* แดงอิฐเข้ม สำหรับแจ้งเตือนค่าผิดปกติ (แยกจาก accent เล็กน้อย) */
+    --red-soft:#F5E3E0;
+    --shadow:0 2px 10px rgba(58,53,50,0.06);
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+  html,body { margin:0; background:var(--bg); color:var(--text); font-family:"Segoe UI","Sarabun",Tahoma,sans-serif; }
+  .app { max-width:560px; margin:0 auto; min-height:100vh; padding-bottom:80px; position:relative; }
+
+  header { padding:16px 16px 12px; background:linear-gradient(135deg,var(--accent),var(--accent2)); border-bottom:1px solid var(--accent); position:sticky; top:0; z-index:40; box-shadow:var(--shadow); }
+  header .row { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  header h1 { margin:0; font-size:17px; color:#FFFFFF; }
+  header .sub { color:rgba(255,255,255,0.82); font-size:12px; margin-top:2px; }
+  .icon-btn { background:rgba(255,255,255,0.14); color:#FFFFFF; border:1px solid rgba(255,255,255,0.35); border-radius:8px; padding:8px 10px; font-size:16px; cursor:pointer; }
+  #syncStatus.ok { color:#FFFFFF; }
+  #syncStatus.err { color:#FFD9CF; }
+
+  .view { display:none; padding:14px 16px 20px; }
+  .view.active { display:block; }
+
+  .section-title { font-size:14px; font-weight:700; color:var(--accent); margin:18px 0 12px; }
+  .section-title:first-child { margin-top:0; }
+
+  /* form */
+  .field { margin-bottom:14px; }
+  .field label { display:block; font-size:13px; color:var(--muted); margin-bottom:6px; font-weight:600; }
+  .field select, .field input, .field textarea {
+    width:100%; padding:13px 14px; border-radius:10px; border:1px solid var(--border);
+    background:var(--panel2); color:var(--text); font-size:15.5px; font-family:inherit;
+  }
+  .field select:focus, .field input:focus, .field textarea:focus { outline:none; border-color:var(--accent); }
+  .field textarea { resize:vertical; min-height:80px; }
+  .field input.warn { border-color:var(--red); background:var(--red-soft); }
+  .field-warn-text { font-size:11.5px; color:var(--red); margin-top:5px; font-weight:600; }
+  .two-col { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+  .compressor-info { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:16px; font-size:12.5px; color:var(--muted); box-shadow:var(--shadow); }
+  .compressor-info b { color:var(--text); }
+  .compound-badge { display:inline-block; margin-top:6px; padding:3px 9px; border-radius:6px; font-size:11px; background:var(--dark-soft); color:var(--dark); font-weight:700; }
+
+  .submit-btn {
+    width:100%; padding:16px; border:none; border-radius:12px; background:linear-gradient(135deg,var(--accent),var(--accent2));
+    color:#FFFFFF; font-weight:800; font-size:16px; cursor:pointer; margin-top:6px;
+  }
+  .submit-btn:active { filter:brightness(0.95); }
+  .submit-btn:disabled { opacity:0.5; }
+  .success-banner {
+    background:var(--green-soft); border:1px solid rgba(62,122,82,0.35); color:var(--green);
+    padding:14px; border-radius:10px; margin-bottom:14px; font-size:14px; text-align:left; font-weight:700;
+  }
+  .success-banner.abn { background:var(--red-soft); border-color:rgba(163,59,50,0.35); color:var(--red); }
+  .success-banner ul { margin:8px 0 0; padding-left:18px; font-weight:400; font-size:12.5px; }
+
+  /* filters */
+  .filter-bar { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+  .filter-bar select, .filter-bar input { flex:1; min-width:110px; padding:10px 10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:13px; }
+  .chip-row { display:flex; gap:6px; overflow-x:auto; padding-bottom:6px; margin-bottom:10px; }
+  .chip { flex-shrink:0; padding:7px 13px; border-radius:20px; font-size:12.5px; border:1px solid var(--border); background:var(--panel2); color:var(--muted); cursor:pointer; white-space:nowrap; }
+  .chip.active { border-color:var(--accent); color:var(--accent); background:var(--accent-soft); font-weight:700; }
+
+  /* reading cards */
+  .reading-card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:12px; box-shadow:var(--shadow); }
+  .reading-card.abnormal { border-color:rgba(163,59,50,0.4); }
+  .reading-top { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .reading-comp { font-weight:700; font-size:14.5px; }
+  .reading-area { color:var(--muted); font-size:12px; }
+  .reading-time { color:var(--muted); font-size:11.5px; white-space:nowrap; }
+  .abn-badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; background:var(--red-soft); color:var(--red); margin-top:6px; }
+  .ok-badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; background:var(--green-soft); color:var(--green); margin-top:6px; }
+  .reading-emp { font-size:12px; color:var(--muted); margin-top:6px; }
+  .reading-vals { margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:6px 12px; font-size:12px; }
+  .reading-vals .k { color:var(--muted); }
+  .reading-vals .v { font-weight:600; }
+  .reading-note { margin-top:10px; font-size:12.5px; background:var(--panel2); border-radius:8px; padding:9px 11px; color:var(--text); }
+  .reading-abn-list { margin-top:8px; font-size:12px; color:var(--red); background:var(--red-soft); border-radius:8px; padding:9px 11px; line-height:1.5; }
+  .empty-state { text-align:center; color:var(--muted); padding:40px 20px; font-size:14px; }
+
+  /* PIN gate */
+  .pin-gate { text-align:center; padding:50px 10px; }
+  .pin-icon { font-size:44px; margin-bottom:10px; }
+  .pin-title { font-size:16px; font-weight:700; }
+  .pin-sub { font-size:13px; color:var(--muted); margin-top:6px; margin-bottom:22px; }
+  .pin-input { width:160px; margin:0 auto 14px; display:block; text-align:center; font-size:26px; letter-spacing:12px; padding:12px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); }
+  .pin-input:focus { outline:none; border-color:var(--accent); }
+  .pin-error { color:var(--red); font-size:13px; min-height:18px; margin-bottom:10px; }
+  .lock-bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; font-size:13px; color:var(--green); }
+  .lock-bar button { background:none; border:none; color:var(--muted); font-size:12.5px; text-decoration:underline; cursor:pointer; }
+
+  /* admin sub-tabs */
+  .subtabs { display:flex; gap:6px; margin-bottom:16px; background:var(--panel2); border-radius:10px; padding:4px; }
+  .subtab { flex:1; text-align:center; padding:9px 3px; border-radius:8px; font-size:11px; font-weight:700; color:var(--muted); cursor:pointer; line-height:1.3; }
+  .subtab.active { background:var(--accent); color:#FFFFFF; }
+  .subview { display:none; }
+  .subview.active { display:block; }
+
+  .daily-summary-card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px; text-align:center; box-shadow:var(--shadow); }
+  .daily-summary-num { font-size:34px; font-weight:800; color:var(--red); }
+  .daily-summary-num.zero { color:var(--green); }
+  .daily-summary-label { font-size:13px; color:var(--muted); margin-top:4px; }
+
+  .std-editor-card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; box-shadow:var(--shadow); }
+  .std-row { display:grid; grid-template-columns:1fr 70px 70px; gap:8px; align-items:center; margin-bottom:10px; }
+  .std-row .std-label { font-size:12.5px; color:var(--muted); }
+  .std-row input { padding:9px 8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:13px; text-align:center; }
+  .std-head { display:grid; grid-template-columns:1fr 70px 70px; gap:8px; font-size:11px; color:var(--muted); font-weight:700; margin-bottom:8px; }
+  .std-head div:not(:first-child) { text-align:center; }
+  .save-std-btn { width:100%; margin-top:14px; padding:14px; border:none; border-radius:10px; background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#FFFFFF; font-weight:800; font-size:14.5px; cursor:pointer; }
+
+  /* employee management */
+  .emp-row { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:10px; box-shadow:var(--shadow); }
+  .emp-row-top { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .emp-row-name { font-weight:700; font-size:14px; }
+  .emp-row-code { color:var(--muted); font-size:12px; margin-top:2px; }
+  .emp-row-btns { display:flex; gap:6px; flex-shrink:0; }
+  .emp-btn { padding:7px 12px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:11.5px; font-weight:700; cursor:pointer; }
+  .emp-status { display:inline-block; padding:2px 9px; border-radius:20px; font-size:10.5px; font-weight:700; margin-top:6px; }
+  .emp-status.active { background:var(--green-soft); color:var(--green); }
+  .emp-status.inactive { background:var(--dark-soft); color:var(--muted); }
+  .emp-edit-form { margin-top:12px; padding-top:12px; border-top:1px solid var(--border); display:none; }
+  .emp-edit-form.open { display:block; }
+  .emp-edit-form input { width:100%; padding:10px 11px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:13.5px; margin-bottom:8px; }
+  .emp-edit-btns { display:flex; gap:8px; margin-top:4px; }
+
+  /* bottom nav */
+  nav.bottom { position:fixed; bottom:0; left:0; right:0; background:#FFFFFF; border-top:1px solid var(--border); display:flex; z-index:50; box-shadow:0 -2px 10px rgba(58,53,50,0.05); }
+  nav.bottom .navwrap { max-width:560px; margin:0 auto; display:flex; width:100%; }
+  nav.bottom button { flex:1; background:none; border:none; color:var(--muted); padding:10px 4px 12px; font-size:11.5px; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:3px; }
+  nav.bottom button .ic { font-size:20px; }
+  nav.bottom button.active { color:var(--accent); }
+
+  /* modal (settings) */
+  .modal-overlay { position:fixed; inset:0; background:rgba(51,48,46,0.55); display:none; align-items:center; justify-content:center; z-index:100; padding:20px; }
+  .modal-overlay.show { display:flex; }
+  .modal-box { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:20px; max-width:420px; width:100%; box-shadow:0 8px 28px rgba(58,53,50,0.18); }
+  .modal-box h3 { margin:0 0 12px; font-size:15px; color:var(--accent); }
+  .modal-box input { width:100%; padding:11px 12px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:13px; margin-bottom:12px; }
+  .modal-btns { display:flex; gap:8px; flex-wrap:wrap; }
+  .btn-secondary { flex:1; padding:11px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-weight:600; font-size:13px; cursor:pointer; }
+  .btn-primary { flex:1; padding:11px; border-radius:8px; border:none; background:var(--accent); color:#FFFFFF; font-weight:700; font-size:13px; cursor:pointer; }
+
+  .loading-text { text-align:center; color:var(--muted); padding:30px; font-size:13.5px; }
+
+  /* oil sight glass (ตาแมวน้ำมัน) */
+  .oilglass-block { margin-bottom:16px; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; box-shadow:var(--shadow); }
+  .oilglass-label { font-size:13px; color:var(--muted); font-weight:600; margin-bottom:10px; }
+  .oilglass-row { display:flex; align-items:center; gap:16px; }
+  .oilglass-svgwrap { flex-shrink:0; width:76px; height:76px; position:relative; }
+  .oilglass-svgwrap svg { width:100%; height:100%; }
+  .oilglass-outline { fill:var(--panel2); stroke:var(--border); stroke-width:3; }
+  .oilglass-fill { fill:#D8A94D; }
+  .oilglass-fill.low { fill:var(--red); }
+  .oilglass-fill.high { fill:#4F7FBF; }
+  .oilglass-meniscus { stroke:#B8863A; stroke-width:1.6; }
+  .oilglass-ring { fill:none; stroke:var(--dark); stroke-opacity:0.15; stroke-width:2; }
+  .oilglass-pct { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:800; color:var(--text); text-shadow:0 1px 2px rgba(255,255,255,0.7); }
+  .oilglass-controls { flex:1; min-width:0; }
+  .oilglass-slider { width:100%; margin:2px 0 10px; accent-color:#D8A94D; }
+  .oilglass-presets { display:flex; gap:5px; flex-wrap:wrap; }
+  .oilglass-preset-btn { flex:1; min-width:40px; padding:6px 4px; border-radius:7px; border:1px solid var(--border); background:var(--panel2); color:var(--muted); font-size:10.5px; font-weight:700; cursor:pointer; }
+  .oilglass-preset-btn.selected { border-color:#D8A94D; color:#8A6415; background:#FBF0DC; }
+  .oilglass-warn-text { font-size:11.5px; color:var(--red); margin-top:8px; font-weight:600; }
+
+  /* export */
+  .export-btn-full { width:100%; padding:12px; border-radius:10px; border:1px solid var(--accent); background:var(--panel); color:var(--accent); font-weight:700; font-size:13.5px; cursor:pointer; margin-bottom:10px; }
+  .export-btn-full.secondary { border-style:dashed; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="row">
+      <div>
+        <h1>🌀 บันทึกค่า Compressor</h1>
+        <div class="sub" id="syncStatus">กำลังเชื่อมต่อ...</div>
+      </div>
+      <button class="icon-btn" id="settingsBtn">⚙</button>
+    </div>
+  </header>
+
+  <!-- ========== TAB 1: บันทึกค่า ========== -->
+  <div class="view active" id="view-log">
+    <div id="logSuccess"></div>
+
+    <div class="section-title">ข้อมูลผู้กรอก</div>
+    <div class="field">
+      <label>ชื่อ-รหัสพนักงาน</label>
+      <select id="empSelect"><option value="">-- เลือกพนักงาน --</option></select>
+    </div>
+
+    <div class="section-title">เลือกเครื่อง Compressor</div>
+    <div class="field">
+      <label>Compressor</label>
+      <select id="compSelect"><option value="">-- เลือกเครื่อง --</option></select>
+    </div>
+    <div class="compressor-info" id="compInfo" style="display:none;"></div>
+
+    <div class="section-title">ค่าพารามิเตอร์</div>
+    <div id="paramFields"></div>
+
+    <div class="field">
+      <label>ความผิดปกติอื่นๆ (ถ้ามี)</label>
+      <textarea id="noteField" placeholder="ระบุความผิดปกติอื่นๆ ที่พบ เช่น เสียงดังผิดปกติ, มีรอยรั่ว ฯลฯ"></textarea>
+    </div>
+
+    <button class="submit-btn" id="submitBtn">บันทึกข้อมูล</button>
+  </div>
+
+  <!-- ========== TAB 2: ประวัติ ========== -->
+  <div class="view" id="view-history">
+    <div class="filter-bar">
+      <select id="histCompFilter"><option value="">ทุกเครื่อง</option></select>
+      <select id="histRangeFilter">
+        <option value="7">7 วันล่าสุด</option>
+        <option value="30" selected>30 วันล่าสุด</option>
+        <option value="all">ทั้งหมด</option>
+      </select>
+    </div>
+    <div class="chip-row">
+      <div class="chip active" data-abn="all">ทั้งหมด</div>
+      <div class="chip" data-abn="abnormal">เฉพาะผิดปกติ</div>
+    </div>
+    <button class="export-btn-full" id="exportFilteredBtn">📤 Export Excel (ตามตัวกรองนี้)</button>
+    <button class="export-btn-full secondary" id="exportAllByCompBtn">📤 Export ทั้งหมด (แยกชีทตามเครื่อง)</button>
+    <div id="historyList"><div class="loading-text">กำลังโหลด...</div></div>
+  </div>
+
+  <!-- ========== TAB 3: แอดมิน ========== -->
+  <div class="view" id="view-admin">
+    <div class="pin-gate" id="pinGate">
+      <div class="pin-icon">🔒</div>
+      <div class="pin-title">สำหรับแอดมินเท่านั้น</div>
+      <div class="pin-sub">กรอกรหัส PIN เพื่อเข้าใช้งาน</div>
+      <input type="password" inputmode="numeric" maxlength="6" class="pin-input" id="pinInput" placeholder="••••">
+      <div class="pin-error" id="pinError"></div>
+    </div>
+
+    <div id="adminContent" style="display:none;">
+      <div class="lock-bar">
+        <span>🔓 เข้าสู่ระบบแอดมินแล้ว</span>
+        <div>
+          <button id="refreshCacheBtn" style="margin-right:10px;">🔄 รีเฟรชข้อมูล</button>
+          <button id="lockBtn">ล็อก</button>
+        </div>
+      </div>
+
+      <div class="subtabs">
+        <div class="subtab active" data-sub="daily">รายงานประจำวัน</div>
+        <div class="subtab" data-sub="all-abn">ความผิดปกติทั้งหมด</div>
+        <div class="subtab" data-sub="std">ตั้งค่ามาตรฐาน</div>
+        <div class="subtab" data-sub="emp">จัดการพนักงาน</div>
+      </div>
+
+      <div class="subview active" id="sub-daily">
+        <div class="daily-summary-card">
+          <div class="daily-summary-num" id="dailyCount">-</div>
+          <div class="daily-summary-label" id="dailyLabel">ความผิดปกติที่พบเมื่อวานนี้</div>
+        </div>
+        <div id="dailyList"></div>
+      </div>
+
+      <div class="subview" id="sub-all-abn">
+        <div class="filter-bar">
+          <select id="abnRangeFilter">
+            <option value="7">7 วันล่าสุด</option>
+            <option value="30" selected>30 วันล่าสุด</option>
+            <option value="all">ทั้งหมด</option>
+          </select>
+        </div>
+        <div id="allAbnList"></div>
+      </div>
+
+      <div class="subview" id="sub-std">
+        <div class="field">
+          <label>เลือกเครื่องที่ต้องการตั้งค่ามาตรฐาน</label>
+          <select id="stdCompSelect"><option value="">-- เลือกเครื่อง --</option></select>
+        </div>
+        <div id="stdEditorWrap"></div>
+      </div>
+
+      <div class="subview" id="sub-emp">
+        <div class="std-editor-card" style="margin-bottom:16px;">
+          <div class="std-label" style="font-weight:700; margin-bottom:10px; color:var(--text);">+ เพิ่มพนักงานใหม่</div>
+          <div class="two-col" style="margin-bottom:10px;">
+            <input type="text" id="newEmpCode" placeholder="รหัสพนักงาน" style="padding:11px 12px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px;">
+            <input type="text" id="newEmpName" placeholder="ชื่อ-นามสกุล" style="padding:11px 12px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:14px;">
+          </div>
+          <button class="save-std-btn" id="addEmpBtn" style="margin-top:0;">+ เพิ่มพนักงาน</button>
+        </div>
+        <div id="employeeList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<nav class="bottom">
+  <div class="navwrap">
+    <button class="navbtn active" data-view="view-log"><span class="ic">📝</span>บันทึกค่า</button>
+    <button class="navbtn" data-view="view-history"><span class="ic">📋</span>ประวัติ</button>
+    <button class="navbtn" data-view="view-admin"><span class="ic">🔐</span>แอดมิน</button>
+  </div>
+</nav>
+
+<!-- Settings modal -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal-box">
+    <h3>⚙ ตั้งค่าการเชื่อมต่อ</h3>
+    <label style="font-size:12.5px;color:var(--muted);display:block;margin-bottom:6px;">Apps Script Web App URL</label>
+    <input type="text" id="urlInput" placeholder="https://script.google.com/macros/s/xxx/exec">
+    <div class="modal-btns">
+      <button class="btn-secondary" id="resetDefaultSettings">ใช้ค่าเริ่มต้น</button>
+      <button class="btn-secondary" id="cancelSettings">ยกเลิก</button>
+      <button class="btn-primary" id="saveSettings">บันทึกและโหลดข้อมูล</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ⚠️ วาง Web App URL ของ Apps Script ที่ deploy แล้วตรงนี้ (ลงท้ายด้วย /exec)
+const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwBGl227UDL8EHZQeJHf8SVZHrDUeoV1YFRVlXI84UL9v1lL6drt1fbOmMCh1PwnCLpwA/exec';
+let APPS_SCRIPT_URL = localStorage.getItem('apps_script_url') || DEFAULT_APPS_SCRIPT_URL;
+
+// ⚠️ นี่เป็นเพียงการป้องกันขั้นพื้นฐาน (PIN อยู่ใน source code ของหน้าเว็บ) ไม่ใช่ระบบยืนยันตัวตนจริง
+// หากต้องการความปลอดภัยที่มากกว่านี้ ควรใช้ระบบล็อกอินแบบเซิร์ฟเวอร์
+const ADMIN_PIN = '4120';
+
+// ---------- พารามิเตอร์ที่ต้องกรอก ----------
+const PARAM_DEFS = [
+  { field:'suction_pressure', label:'Suction Pressure', unit:'Bar', minKey:'sp_min', maxKey:'sp_max' },
+  { field:'suction_temp', label:'Suction Temperature', unit:'°C', minKey:'st_min', maxKey:'st_max' },
+  { field:'discharge_pressure', label:'Discharge Pressure', unit:'Bar', minKey:'dp_min', maxKey:'dp_max' },
+  { field:'discharge_temp', label:'Discharge Temperature', unit:'°C', minKey:'dt_min', maxKey:'dt_max' },
+  { field:'oil_pressure', label:'Oil Pressure', unit:'Bar', minKey:'op_min', maxKey:'op_max' },
+  { field:'oil_diff_pressure', label:'Oil diff Pressure', unit:'Bar', minKey:'odp_min', maxKey:'odp_max' },
+  { field:'oil_temp', label:'Oil Temperature', unit:'°C', minKey:'ot_min', maxKey:'ot_max' },
+  { field:'motor_current', label:'Motor Current', unit:'A', minKey:'mc_min', maxKey:'mc_max' }
+];
+// capacity แยกจัดการเอง เพราะขึ้นกับว่าเป็น Compound หรือไม่
+
+let compressors = [];
+let readings = [];
+let employees = [];
+let selectedCompressor = null;
+let selectedEmployee = null;
+
+function apiGet(params) {
+  const qs = new URLSearchParams(params).toString();
+  return fetch(APPS_SCRIPT_URL + '?' + qs).then(r => r.json());
+}
+function apiPost(body) {
+  return fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    headers: {'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify(body)
+  }).then(r => r.json());
+}
+
+function setSyncStatus(ok, msg) {
+  const el = document.getElementById('syncStatus');
+  el.textContent = msg;
+  el.className = ok ? 'ok' : 'err';
+}
+
+function checkConfigured() {
+  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === 'PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE') {
+    setSyncStatus(false, '⚠ ยังไม่ได้ตั้งค่า URL - กดปุ่ม ⚙');
+    return false;
+  }
+  return true;
+}
+
+/* ================= โหลดข้อมูลเครื่อง Compressor ================= */
+function loadCompressors() {
+  return apiGet({ type:'compressors' }).then(res => {
+    if (!res || !res.ok) throw new Error((res && res.error) || 'load compressors failed');
+    compressors = Array.isArray(res.compressors) ? res.compressors : [];
+    populateCompressorSelects();
+  });
+}
+
+function compLabel(c) {
+  const area = c.load_area ? ' (' + c.load_area + ')' : '';
+  return c.no_label + area + ' — ' + c.brand + ' ' + c.model;
+}
+
+function populateCompressorSelects() {
+  const selects = [
+    document.getElementById('compSelect'),
+    document.getElementById('histCompFilter'),
+    document.getElementById('stdCompSelect')
+  ];
+  selects.forEach((sel, idx) => {
+    const keepFirst = sel.options[0];
+    sel.innerHTML = '';
+    sel.appendChild(keepFirst);
+    compressors.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = compLabel(c);
+      sel.appendChild(opt);
+    });
+  });
+}
+
+/* ================= โหลดข้อมูลพนักงาน ================= */
+function isActiveEmployee(e) { return e.active === true || e.active === 'TRUE' || e.active === 'true'; }
+
+function loadEmployees() {
+  return apiGet({ type:'employees' }).then(res => {
+    if (!res || !res.ok) throw new Error((res && res.error) || 'load employees failed');
+    employees = Array.isArray(res.employees) ? res.employees : [];
+    populateEmployeeSelect();
+    if (document.getElementById('sub-emp').classList.contains('active')) renderEmployeeList();
+  });
+}
+
+function empLabel(e) { return e.emp_code + ' — ' + e.emp_name; }
+
+function populateEmployeeSelect() {
+  const sel = document.getElementById('empSelect');
+  const savedCode = localStorage.getItem('emp_code') || '';
+  sel.innerHTML = '<option value="">-- เลือกพนักงาน --</option>';
+  employees.filter(isActiveEmployee).forEach(e => {
+    const opt = document.createElement('option');
+    opt.value = e.id;
+    opt.textContent = empLabel(e);
+    sel.appendChild(opt);
+  });
+  if (savedCode) {
+    const match = employees.find(e => String(e.emp_code) === savedCode && isActiveEmployee(e));
+    if (match) { sel.value = match.id; selectedEmployee = match; }
+  }
+}
+
+document.getElementById('empSelect').addEventListener('change', function() {
+  selectedEmployee = employees.find(e => String(e.id) === String(this.value)) || null;
+  if (selectedEmployee) localStorage.setItem('emp_code', selectedEmployee.emp_code);
+});
+
+/* ================= TAB 1: ฟอร์มบันทึกค่า ================= */
+document.getElementById('compSelect').addEventListener('change', function() {
+  const id = this.value;
+  selectedCompressor = compressors.find(c => String(c.id) === String(id)) || null;
+  renderCompInfo();
+  renderParamFields();
+});
+
+function renderCompInfo() {
+  const wrap = document.getElementById('compInfo');
+  if (!selectedCompressor) { wrap.style.display = 'none'; return; }
+  const c = selectedCompressor;
+  wrap.style.display = 'block';
+  const isCompound = c.is_compound === true || c.is_compound === 'TRUE' || c.is_compound === 'true';
+  wrap.innerHTML =
+    '<b>' + c.no_label + '</b> — ' + (c.load_area||'') + '<br>' +
+    c.brand + ' ' + c.model + (c.serial ? (' · S/N ' + c.serial) : '') + '<br>' +
+    (c.comp_type||'') + (c.stage_type ? (' · ' + c.stage_type) : '') +
+    (isCompound ? '<div class="compound-badge">⚠ เครื่องนี้เป็น Compound — ต้องกรอก Low cap และ High cap แยกกัน</div>' : '');
+}
+
+function fieldWarnCheck(input, c, minKey, maxKey) {
+  const warnEl = input.parentElement.querySelector('.field-warn-text');
+  const val = input.value;
+  if (val === '' || !c) { input.classList.remove('warn'); if (warnEl) warnEl.remove(); return; }
+  const num = Number(val);
+  const min = c[minKey], max = c[maxKey];
+  const hasMin = min !== '' && min !== null && min !== undefined;
+  const hasMax = max !== '' && max !== null && max !== undefined;
+  let bad = false, msg = '';
+  if (hasMin && num < Number(min)) { bad = true; msg = 'ต่ำกว่ามาตรฐาน (' + min + (hasMax?'-'+max:'') + ')'; }
+  else if (hasMax && num > Number(max)) { bad = true; msg = 'สูงกว่ามาตรฐาน (' + (hasMin?min+'-':'') + max + ')'; }
+  input.classList.toggle('warn', bad);
+  if (warnEl) warnEl.remove();
+  if (bad) {
+    const p = document.createElement('div');
+    p.className = 'field-warn-text';
+    p.textContent = '⚠ ' + msg;
+    input.parentElement.appendChild(p);
+  }
+}
+
+/* ---------- ระดับน้ำมัน (ตาแมว) — widget แบบวงกลมแสดงระดับ ให้ช่างปาดระดับตามที่ตามองเห็น ---------- */
+function getSightGlassCount(c) {
+  const n = Number(c && c.sight_glass_count);
+  return (n === 2) ? 2 : 1; // ถ้าไม่ได้ตั้งค่าไว้ ให้ถือว่าเป็นตาเดียว (ค่าเริ่มต้น)
+}
+
+function oilGlassMinMaxKeys(idx) {
+  return idx === 2 ? ['oillvl2_min','oillvl2_max'] : ['oillvl1_min','oillvl1_max'];
+}
+
+function buildOilGlassWidget(idx, c) {
+  const wrapDiv = document.createElement('div');
+  wrapDiv.className = 'oilglass-block';
+  wrapDiv.dataset.glass = idx;
+  const glassTitle = getSightGlassCount(c) === 2 ? ('ระดับน้ำมัน — ตาแมวที่ ' + idx + ' (%)') : 'ระดับน้ำมัน (ตาแมว) (%)';
+  wrapDiv.innerHTML =
+    '<div class="oilglass-label">🛢 ' + glassTitle + '</div>' +
+    '<div class="oilglass-row">' +
+      '<div class="oilglass-svgwrap">' +
+        '<svg viewBox="0 0 100 100">' +
+          '<circle class="oilglass-outline" cx="50" cy="50" r="44"/>' +
+          '<clipPath id="oilclip' + idx + '"><circle cx="50" cy="50" r="44"/></clipPath>' +
+          '<g clip-path="url(#oilclip' + idx + ')">' +
+            '<rect class="oilglass-fill" data-el="fill" x="0" y="100" width="100" height="0"/>' +
+            '<line class="oilglass-meniscus" data-el="meniscus" x1="2" x2="98" y1="100" y2="100"/>' +
+          '</g>' +
+          '<circle class="oilglass-ring" cx="50" cy="50" r="44"/>' +
+        '</svg>' +
+        '<div class="oilglass-pct" data-el="pctlabel">50%</div>' +
+      '</div>' +
+      '<div class="oilglass-controls">' +
+        '<input type="range" min="0" max="100" step="5" value="50" class="oilglass-slider" data-field="oil_level_' + idx + '">' +
+        '<div class="oilglass-presets">' +
+          '<button type="button" class="oilglass-preset-btn" data-val="0">ว่าง</button>' +
+          '<button type="button" class="oilglass-preset-btn" data-val="25">ต่ำ</button>' +
+          '<button type="button" class="oilglass-preset-btn selected" data-val="50">กลาง</button>' +
+          '<button type="button" class="oilglass-preset-btn" data-val="75">สูง</button>' +
+          '<button type="button" class="oilglass-preset-btn" data-val="100">เต็ม</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  const slider = wrapDiv.querySelector('.oilglass-slider');
+  const presetBtns = wrapDiv.querySelectorAll('.oilglass-preset-btn');
+
+  function applyLevel(pct) {
+    slider.value = pct;
+    updateOilGlassVisual(wrapDiv, pct, c, idx);
+    presetBtns.forEach(b => b.classList.toggle('selected', Number(b.dataset.val) === pct));
+  }
+
+  slider.addEventListener('input', function() { applyLevel(Number(this.value)); });
+  presetBtns.forEach(btn => {
+    btn.addEventListener('click', () => applyLevel(Number(btn.dataset.val)));
+  });
+
+  // ตั้งค่าเริ่มต้นที่ระดับกลาง (50%) แล้ววาดครั้งแรก
+  updateOilGlassVisual(wrapDiv, 50, c, idx);
+  return wrapDiv;
+}
+
+function updateOilGlassVisual(wrapDiv, pct, c, idx) {
+  const fillEl = wrapDiv.querySelector('[data-el="fill"]');
+  const meniscusEl = wrapDiv.querySelector('[data-el="meniscus"]');
+  const pctLabel = wrapDiv.querySelector('[data-el="pctlabel"]');
+  const y = 100 - pct;
+  fillEl.setAttribute('y', y);
+  fillEl.setAttribute('height', pct);
+  meniscusEl.setAttribute('y1', y);
+  meniscusEl.setAttribute('y2', y);
+  pctLabel.textContent = pct + '%';
+
+  const [minKey, maxKey] = oilGlassMinMaxKeys(idx);
+  let warnMsg = '';
+  fillEl.className.baseVal = 'oilglass-fill';
+  if (c) {
+    const min = c[minKey], max = c[maxKey];
+    const hasMin = min !== '' && min !== null && min !== undefined;
+    const hasMax = max !== '' && max !== null && max !== undefined;
+    if (hasMin && pct < Number(min)) { fillEl.classList.add('low'); warnMsg = 'ระดับน้ำมันต่ำกว่ามาตรฐาน (' + min + (hasMax?'-'+max:'') + '%)'; }
+    else if (hasMax && pct > Number(max)) { fillEl.classList.add('high'); warnMsg = 'ระดับน้ำมันสูงกว่ามาตรฐาน (' + (hasMin?min+'-':'') + max + '%)'; }
+  }
+  let warnEl = wrapDiv.querySelector('.oilglass-warn-text');
+  if (warnEl) warnEl.remove();
+  if (warnMsg) {
+    warnEl = document.createElement('div');
+    warnEl.className = 'oilglass-warn-text';
+    warnEl.textContent = '⚠ ' + warnMsg;
+    wrapDiv.appendChild(warnEl);
+  }
+}
+
+function renderParamFields() {
+  const wrap = document.getElementById('paramFields');
+  wrap.innerHTML = '';
+  const c = selectedCompressor;
+  const isCompound = c && (c.is_compound === true || c.is_compound === 'TRUE' || c.is_compound === 'true');
+
+  PARAM_DEFS.forEach(def => {
+    const div = document.createElement('div');
+    div.className = 'field';
+    div.innerHTML = '<label>' + def.label + ' (' + def.unit + ')</label>' +
+      '<input type="number" step="0.01" inputmode="decimal" data-field="' + def.field + '">';
+    wrap.appendChild(div);
+    const input = div.querySelector('input');
+    input.addEventListener('input', () => fieldWarnCheck(input, c, def.minKey, def.maxKey));
+  });
+
+  // ระดับน้ำมัน (ตาแมว) — 1 หรือ 2 ตา ตามที่แอดมินตั้งค่าไว้ต่อเครื่อง
+  if (c) {
+    const glassCount = getSightGlassCount(c);
+    for (let g = 1; g <= glassCount; g++) {
+      wrap.appendChild(buildOilGlassWidget(g, c));
+    }
+  }
+
+  // Capacity: เดี่ยว หรือ Low/High แยก
+  if (isCompound) {
+    const div = document.createElement('div');
+    div.className = 'field two-col';
+    div.style.display = 'grid';
+    div.innerHTML =
+      '<div><label>Low Capacity (%)</label><input type="number" step="0.1" inputmode="decimal" data-field="low_cap"></div>' +
+      '<div><label>High Capacity (%)</label><input type="number" step="0.1" inputmode="decimal" data-field="high_cap"></div>';
+    wrap.appendChild(div);
+    div.querySelectorAll('input').forEach(input => {
+      const key = input.dataset.field === 'low_cap' ? ['lowcap_min','lowcap_max'] : ['highcap_min','highcap_max'];
+      input.addEventListener('input', () => fieldWarnCheck(input, c, key[0], key[1]));
+    });
+  } else {
+    const div = document.createElement('div');
+    div.className = 'field';
+    div.innerHTML = '<label>Capacity (%)</label><input type="number" step="0.1" inputmode="decimal" data-field="capacity">';
+    wrap.appendChild(div);
+    const input = div.querySelector('input');
+    input.addEventListener('input', () => fieldWarnCheck(input, c, 'cap_min', 'cap_max'));
+  }
+}
+
+document.getElementById('submitBtn').addEventListener('click', function() {
+  if (!selectedEmployee) { alert('กรุณาเลือกชื่อพนักงาน'); return; }
+  if (!selectedCompressor) { alert('กรุณาเลือกเครื่อง Compressor'); return; }
+
+  localStorage.setItem('emp_code', selectedEmployee.emp_code);
+
+  const reading = { compressor_id: selectedCompressor.id, employee_name: selectedEmployee.emp_name, employee_code: selectedEmployee.emp_code };
+  document.querySelectorAll('#paramFields input[data-field]').forEach(input => {
+    if (input.value !== '') reading[input.dataset.field] = Number(input.value);
+  });
+  reading.note = document.getElementById('noteField').value.trim();
+
+  const btn = this;
+  btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+  apiPost({ action:'createReading', reading: reading }).then(res => {
+    btn.disabled = false; btn.textContent = 'บันทึกข้อมูล';
+    if (!res.ok) { alert('เกิดข้อผิดพลาด: ' + (res.error||'')); return; }
+    const box = document.getElementById('logSuccess');
+    if (res.is_abnormal) {
+      box.innerHTML = '<div class="success-banner abn">⚠ บันทึกสำเร็จ — พบค่าผิดปกติ!' +
+        (res.abnormal_params && res.abnormal_params.length ? ('<ul>' + res.abnormal_params.map(a=>'<li>'+escapeHtml(a)+'</li>').join('') + '</ul>') : '') +
+        '</div>';
+    } else {
+      box.innerHTML = '<div class="success-banner">✅ บันทึกสำเร็จ — ค่าทั้งหมดอยู่ในเกณฑ์ปกติ</div>';
+    }
+    document.querySelectorAll('#paramFields input').forEach(i => { i.value=''; i.classList.remove('warn'); });
+    document.getElementById('noteField').value = '';
+    document.getElementById('compSelect').value = '';
+    selectedCompressor = null;
+    renderCompInfo(); renderParamFields();
+    loadReadings();
+    setTimeout(() => { box.innerHTML=''; }, 6000);
+  }).catch(err => { btn.disabled=false; btn.textContent='บันทึกข้อมูล'; alert('เชื่อมต่อไม่ได้: '+err); });
+});
+
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ================= TAB 2: ประวัติ ================= */
+let histAbnFilter = 'all';
+
+function loadReadings(opts) {
+  opts = opts || {};
+  const params = {};
+  if (opts.all) params.all = '1';
+  return apiGet(params).then(res => {
+    if (!res || !res.ok) throw new Error((res && res.error) || 'load readings failed');
+    readings = Array.isArray(res.readings) ? res.readings : [];
+    renderHistory();
+    return res;
+  });
+}
+
+function isAbnormalRow(r) { return r.is_abnormal === true || r.is_abnormal === 'TRUE' || r.is_abnormal === 'true'; }
+
+function fmtDate(d) {
+  const dt = new Date(d);
+  return dt.toLocaleString('th-TH', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+}
+
+function readingValueRows(r) {
+  const rows = [];
+  PARAM_DEFS.forEach(def => {
+    if (r[def.field] !== '' && r[def.field] !== undefined && r[def.field] !== null) {
+      rows.push([def.label, r[def.field] + ' ' + def.unit]);
+    }
+  });
+  if (r.oil_level_1 !== '' && r.oil_level_1 !== undefined && r.oil_level_1 !== null) rows.push(['🛢 Oil Level (ตา 1)', r.oil_level_1 + ' %']);
+  if (r.oil_level_2 !== '' && r.oil_level_2 !== undefined && r.oil_level_2 !== null) rows.push(['🛢 Oil Level (ตา 2)', r.oil_level_2 + ' %']);
+  if (r.capacity !== '' && r.capacity !== undefined && r.capacity !== null) rows.push(['Capacity', r.capacity + ' %']);
+  if (r.low_cap !== '' && r.low_cap !== undefined && r.low_cap !== null) rows.push(['Low Cap', r.low_cap + ' %']);
+  if (r.high_cap !== '' && r.high_cap !== undefined && r.high_cap !== null) rows.push(['High Cap', r.high_cap + ' %']);
+  return rows;
+}
+
+function renderReadingCard(r) {
+  const abn = isAbnormalRow(r);
+  const vals = readingValueRows(r);
+  return '<div class="reading-card' + (abn?' abnormal':'') + '">' +
+    '<div class="reading-top">' +
+      '<div><div class="reading-comp">' + escapeHtml(r.no_label) + '</div><div class="reading-area">' + escapeHtml(r.load_area||'') + '</div></div>' +
+      '<div class="reading-time">' + fmtDate(r.timestamp) + '</div>' +
+    '</div>' +
+    (abn ? '<div class="abn-badge">⚠ พบความผิดปกติ</div>' : '<div class="ok-badge">✔ ปกติ</div>') +
+    '<div class="reading-emp">👤 ' + escapeHtml(r.employee_name) + ' (' + escapeHtml(r.employee_code) + ')</div>' +
+    '<div class="reading-vals">' + vals.map(v => '<div class="k">'+v[0]+'</div><div class="v">'+v[1]+'</div>').join('') + '</div>' +
+    (r.abnormal_params ? '<div class="reading-abn-list">' + escapeHtml(r.abnormal_params).split(' | ').join('<br>') + '</div>' : '') +
+    (r.note ? '<div class="reading-note">📝 ' + escapeHtml(r.note) + '</div>' : '') +
+  '</div>';
+}
+
+function getFilteredHistoryItems() {
+  const compFilter = document.getElementById('histCompFilter').value;
+  let items = readings.slice();
+  if (compFilter) items = items.filter(r => String(r.compressor_id) === String(compFilter));
+  if (histAbnFilter === 'abnormal') items = items.filter(isAbnormalRow);
+  return items;
+}
+
+function renderHistory() {
+  const list = document.getElementById('historyList');
+  const items = getFilteredHistoryItems();
+  if (!items.length) { list.innerHTML = '<div class="empty-state">ไม่พบข้อมูลในช่วงที่เลือก</div>'; return; }
+  list.innerHTML = items.slice(0, 200).map(renderReadingCard).join('');
+}
+
+document.getElementById('histCompFilter').addEventListener('change', renderHistory);
+document.getElementById('histRangeFilter').addEventListener('change', function() {
+  if (this.value === 'all') { loadReadings({all:true}); }
+  else { loadReadings({}); }
+});
+document.querySelectorAll('#view-history .chip').forEach(chip => {
+  chip.addEventListener('click', function() {
+    document.querySelectorAll('#view-history .chip').forEach(c => c.classList.remove('active'));
+    this.classList.add('active');
+    histAbnFilter = this.dataset.abn;
+    renderHistory();
+  });
+});
+
+/* ================= Export Excel (SheetJS) ================= */
+function sanitizeFilename(s) {
+  return String(s || 'compressor').replace(/[^a-zA-Z0-9ก-๙_\-]+/g, '_').replace(/^_+|_+$/g, '') || 'compressor';
+}
+
+function readingToExportRow(r) {
+  return {
+    'วันที่-เวลา': fmtDate(r.timestamp),
+    'เครื่อง': r.no_label,
+    'พื้นที่': r.load_area,
+    'พนักงาน': r.employee_name,
+    'รหัสพนักงาน': r.employee_code,
+    'Suction Pressure (Bar)': r.suction_pressure,
+    'Suction Temp (°C)': r.suction_temp,
+    'Discharge Pressure (Bar)': r.discharge_pressure,
+    'Discharge Temp (°C)': r.discharge_temp,
+    'Oil Pressure (Bar)': r.oil_pressure,
+    'Oil diff Pressure (Bar)': r.oil_diff_pressure,
+    'Oil Temp (°C)': r.oil_temp,
+    'Oil Level ตา 1 (%)': r.oil_level_1,
+    'Oil Level ตา 2 (%)': r.oil_level_2,
+    'Capacity (%)': r.capacity,
+    'Low Cap (%)': r.low_cap,
+    'High Cap (%)': r.high_cap,
+    'Motor Current (A)': r.motor_current,
+    'ความผิดปกติอื่นๆ': r.note,
+    'รายการที่เกินมาตรฐาน': r.abnormal_params,
+    'สถานะ': isAbnormalRow(r) ? 'ผิดปกติ' : 'ปกติ'
+  };
+}
+
+document.getElementById('exportFilteredBtn').addEventListener('click', function() {
+  const items = getFilteredHistoryItems();
+  if (!items.length) { alert('ไม่มีข้อมูลให้ export ตามตัวกรองนี้'); return; }
+  const compFilterId = document.getElementById('histCompFilter').value;
+  const compObj = compFilterId ? compressors.find(c => String(c.id) === String(compFilterId)) : null;
+  const sheetName = (compObj ? compObj.no_label : 'ทุกเครื่อง').substring(0, 31);
+
+  const ws = XLSX.utils.json_to_sheet(items.map(readingToExportRow));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  const namePart = compObj ? sanitizeFilename(compObj.no_label) : 'all';
+  XLSX.writeFile(wb, 'compressor_log_' + namePart + '_' + new Date().toISOString().slice(0,10) + '.xlsx');
+});
+
+document.getElementById('exportAllByCompBtn').addEventListener('click', function() {
+  const btn = this;
+  btn.disabled = true; btn.textContent = 'กำลังเตรียมไฟล์...';
+  apiGet({ all: '1' }).then(res => {
+    btn.disabled = false; btn.textContent = '📤 Export ทั้งหมด (แยกชีทตามเครื่อง)';
+    if (!res.ok) { alert('เกิดข้อผิดพลาด: ' + (res.error||'')); return; }
+    const all = res.readings;
+    if (!all.length) { alert('ยังไม่มีข้อมูลในระบบ'); return; }
+
+    const wb = XLSX.utils.book_new();
+    const summaryWs = XLSX.utils.json_to_sheet(all.map(readingToExportRow));
+    XLSX.utils.book_append_sheet(wb, summaryWs, 'สรุปทั้งหมด');
+
+    const usedNames = { 'สรุปทั้งหมด': true };
+    compressors.forEach(c => {
+      const rowsForComp = all.filter(r => String(r.compressor_id) === String(c.id));
+      if (!rowsForComp.length) return;
+      let base = c.no_label.substring(0, 28) || ('C' + c.id);
+      let finalName = base;
+      let n = 2;
+      while (usedNames[finalName]) { finalName = (base.substring(0,28)) + '_' + n; n++; }
+      usedNames[finalName] = true;
+      const ws = XLSX.utils.json_to_sheet(rowsForComp.map(readingToExportRow));
+      XLSX.utils.book_append_sheet(wb, ws, finalName.substring(0,31));
+    });
+
+    XLSX.writeFile(wb, 'compressor_log_all_by_machine_' + new Date().toISOString().slice(0,10) + '.xlsx');
+  }).catch(err => { btn.disabled=false; btn.textContent='📤 Export ทั้งหมด (แยกชีทตามเครื่อง)'; alert('เชื่อมต่อไม่ได้: '+err); });
+});
+
+/* ================= TAB 3: แอดมิน ================= */
+const pinGate = document.getElementById('pinGate');
+const adminContent = document.getElementById('adminContent');
+
+function isAdminUnlocked() { return sessionStorage.getItem('admin_unlocked') === '1'; }
+function showAdminState() {
+  if (isAdminUnlocked()) { pinGate.style.display='none'; adminContent.style.display='block'; renderDailyReport(); }
+  else { pinGate.style.display='block'; adminContent.style.display='none'; }
+}
+document.getElementById('pinInput').addEventListener('input', function() {
+  if (this.value.length >= ADMIN_PIN.length) {
+    if (this.value === ADMIN_PIN) {
+      sessionStorage.setItem('admin_unlocked','1');
+      document.getElementById('pinError').textContent='';
+      this.value='';
+      showAdminState();
+    } else {
+      document.getElementById('pinError').textContent = 'รหัส PIN ไม่ถูกต้อง';
+      this.value='';
+    }
+  }
+});
+document.getElementById('lockBtn').addEventListener('click', function() {
+  sessionStorage.removeItem('admin_unlocked');
+  showAdminState();
+});
+document.getElementById('refreshCacheBtn').addEventListener('click', function() {
+  const btn = this;
+  btn.disabled = true; btn.textContent = 'กำลังรีเฟรช...';
+  apiPost({ action:'clearCache' }).then(res => {
+    return Promise.all([loadCompressors(), loadEmployees()]);
+  }).then(() => {
+    btn.disabled = false; btn.textContent = '🔄 รีเฟรชข้อมูล';
+    alert('รีเฟรชข้อมูลเรียบร้อย — ดึงค่าล่าสุดจาก Google Sheet แล้ว');
+  }).catch(err => {
+    btn.disabled = false; btn.textContent = '🔄 รีเฟรชข้อมูล';
+    alert('เชื่อมต่อไม่ได้: ' + err);
+  });
+});
+
+document.querySelectorAll('.subtab').forEach(tab => {
+  tab.addEventListener('click', function() {
+    document.querySelectorAll('.subtab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.subview').forEach(v => v.classList.remove('active'));
+    this.classList.add('active');
+    document.getElementById('sub-' + this.dataset.sub).classList.add('active');
+    if (this.dataset.sub === 'daily') renderDailyReport();
+    if (this.dataset.sub === 'all-abn') renderAllAbnormal();
+    if (this.dataset.sub === 'emp') renderEmployeeList();
+  });
+});
+
+// ---- รายงานประจำวัน (เมื่อวานนี้) ----
+function renderDailyReport() {
+  const now = new Date();
+  const yStart = new Date(now); yStart.setDate(now.getDate()-1); yStart.setHours(0,0,0,0);
+  const yEnd = new Date(now); yEnd.setDate(now.getDate()-1); yEnd.setHours(23,59,59,999);
+
+  // ให้แน่ใจว่ามีข้อมูลย้อนหลังพอ (โหลดแบบ all ถ้าจำเป็น)
+  const proceed = () => {
+    const items = readings.filter(r => {
+      const t = new Date(r.timestamp);
+      return t >= yStart && t <= yEnd && isAbnormalRow(r);
+    });
+    const countEl = document.getElementById('dailyCount');
+    countEl.textContent = items.length;
+    countEl.className = 'daily-summary-num' + (items.length===0 ? ' zero' : '');
+    document.getElementById('dailyLabel').textContent =
+      'ความผิดปกติที่พบเมื่อวานนี้ (' + yStart.toLocaleDateString('th-TH') + ')';
+    const listEl = document.getElementById('dailyList');
+    listEl.innerHTML = items.length ? items.map(renderReadingCard).join('') : '<div class="empty-state">✅ ไม่พบความผิดปกติเมื่อวานนี้</div>';
+  };
+  loadReadings({all:true}).then(proceed).catch(proceed);
+}
+
+// ---- ความผิดปกติทั้งหมด ----
+function renderAllAbnormal() {
+  const range = document.getElementById('abnRangeFilter').value;
+  const proceed = () => {
+    let items = readings.filter(isAbnormalRow);
+    if (range !== 'all') {
+      const d = new Date(); d.setDate(d.getDate() - Number(range));
+      items = items.filter(r => new Date(r.timestamp) >= d);
+    }
+    const listEl = document.getElementById('allAbnList');
+    listEl.innerHTML = items.length ? items.map(renderReadingCard).join('') : '<div class="empty-state">ไม่พบความผิดปกติในช่วงที่เลือก</div>';
+  };
+  if (range === 'all') loadReadings({all:true}).then(proceed).catch(proceed);
+  else proceed();
+}
+document.getElementById('abnRangeFilter').addEventListener('change', renderAllAbnormal);
+
+// ---- ตั้งค่ามาตรฐาน ----
+document.getElementById('stdCompSelect').addEventListener('change', function() {
+  renderStdEditor(compressors.find(c => String(c.id) === String(this.value)));
+});
+
+function stdField(label, minKey, maxKey, c) {
+  return '<div class="std-row">' +
+    '<div class="std-label">' + label + '</div>' +
+    '<input type="number" step="0.01" data-key="' + minKey + '" value="' + (c[minKey]!==''&&c[minKey]!==undefined?c[minKey]:'') + '" placeholder="min">' +
+    '<input type="number" step="0.01" data-key="' + maxKey + '" value="' + (c[maxKey]!==''&&c[maxKey]!==undefined?c[maxKey]:'') + '" placeholder="max">' +
+  '</div>';
+}
+
+function renderStdEditor(c) {
+  const wrap = document.getElementById('stdEditorWrap');
+  if (!c) { wrap.innerHTML = ''; return; }
+  const isCompound = c.is_compound === true || c.is_compound === 'TRUE' || c.is_compound === 'true';
+  const glassCount = getSightGlassCount(c);
+  let html = '<div class="std-editor-card">' +
+    '<div class="std-head"><div>พารามิเตอร์</div><div>Min</div><div>Max</div></div>';
+  PARAM_DEFS.forEach(def => { html += stdField(def.label + ' (' + def.unit + ')', def.minKey, def.maxKey, c); });
+  if (isCompound) {
+    html += stdField('Low Capacity (%)', 'lowcap_min', 'lowcap_max', c);
+    html += stdField('High Capacity (%)', 'highcap_min', 'highcap_max', c);
+  } else {
+    html += stdField('Capacity (%)', 'cap_min', 'cap_max', c);
+  }
+  html += '<div class="std-row" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">' +
+      '<div class="std-label" style="font-weight:700; color:var(--text);">🛢 จำนวนตาน้ำมัน (Oil Sight Glass)</div>' +
+      '<select id="stdSightGlassCount" data-key="sight_glass_count" style="grid-column:2 / span 2; padding:8px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); text-align:center;">' +
+        '<option value="1"' + (glassCount===1?' selected':'') + '>1 ตา</option>' +
+        '<option value="2"' + (glassCount===2?' selected':'') + '>2 ตา</option>' +
+      '</select>' +
+    '</div>' +
+    stdField('Oil Level ตาแมวที่ 1 (%)', 'oillvl1_min', 'oillvl1_max', c) +
+    '<div id="oilLvl2Row" style="display:' + (glassCount===2?'block':'none') + ';">' +
+      stdField('Oil Level ตาแมวที่ 2 (%)', 'oillvl2_min', 'oillvl2_max', c) +
+    '</div>';
+  html += '<button class="save-std-btn" id="saveStdBtn">💾 บันทึกค่ามาตรฐาน</button>' +
+  '</div>';
+  wrap.innerHTML = html;
+
+  document.getElementById('stdSightGlassCount').addEventListener('change', function() {
+    document.getElementById('oilLvl2Row').style.display = (this.value === '2') ? 'block' : 'none';
+  });
+
+  document.getElementById('saveStdBtn').addEventListener('click', function() {
+    const standards = {};
+    wrap.querySelectorAll('input[data-key], select[data-key]').forEach(input => {
+      standards[input.dataset.key] = input.value === '' ? '' : Number(input.value);
+    });
+    this.disabled = true; this.textContent = 'กำลังบันทึก...';
+    apiPost({ action:'updateStandard', compressorId: c.id, standards: standards }).then(res => {
+      this.disabled = false; this.textContent = '💾 บันทึกค่ามาตรฐาน';
+      if (!res.ok) { alert('เกิดข้อผิดพลาด: ' + (res.error||'')); return; }
+      Object.keys(standards).forEach(k => c[k] = standards[k]);
+      alert('บันทึกค่ามาตรฐานเรียบร้อย');
+    }).catch(err => { this.disabled=false; this.textContent='💾 บันทึกค่ามาตรฐาน'; alert('เชื่อมต่อไม่ได้: '+err); });
+  });
+}
+
+// ---- จัดการพนักงาน (แอดมิน) ----
+function renderEmployeeList() {
+  const wrap = document.getElementById('employeeList');
+  if (!employees.length) { wrap.innerHTML = '<div class="empty-state">ยังไม่มีรายชื่อพนักงาน</div>'; return; }
+  const sorted = employees.slice().sort((a,b) => {
+    const aa = isActiveEmployee(a) ? 0 : 1, bb = isActiveEmployee(b) ? 0 : 1;
+    if (aa !== bb) return aa - bb;
+    return String(a.emp_name).localeCompare(String(b.emp_name), 'th');
+  });
+  wrap.innerHTML = sorted.map(e => {
+    const active = isActiveEmployee(e);
+    return '<div class="emp-row" data-id="' + e.id + '">' +
+      '<div class="emp-row-top">' +
+        '<div><div class="emp-row-name">' + escapeHtml(e.emp_name) + '</div><div class="emp-row-code">รหัส ' + escapeHtml(e.emp_code) + '</div>' +
+        '<span class="emp-status ' + (active?'active':'inactive') + '">' + (active?'ใช้งานอยู่':'ปิดใช้งาน') + '</span></div>' +
+        '<div class="emp-row-btns">' +
+          '<button class="emp-btn edit-emp-btn">แก้ไข</button>' +
+          '<button class="emp-btn toggle-emp-btn">' + (active?'ปิดใช้งาน':'เปิดใช้งาน') + '</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="emp-edit-form">' +
+        '<input type="text" class="edit-emp-code" value="' + escapeHtml(e.emp_code) + '" placeholder="รหัสพนักงาน">' +
+        '<input type="text" class="edit-emp-name" value="' + escapeHtml(e.emp_name) + '" placeholder="ชื่อ-นามสกุล">' +
+        '<div class="emp-edit-btns">' +
+          '<button class="btn-secondary cancel-emp-btn">ยกเลิก</button>' +
+          '<button class="btn-primary save-emp-btn">บันทึก</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  wrap.querySelectorAll('.emp-row').forEach(row => {
+    const id = row.dataset.id;
+    const emp = employees.find(e => String(e.id) === String(id));
+    const form = row.querySelector('.emp-edit-form');
+
+    row.querySelector('.edit-emp-btn').addEventListener('click', () => form.classList.toggle('open'));
+    row.querySelector('.cancel-emp-btn').addEventListener('click', () => form.classList.remove('open'));
+
+    row.querySelector('.toggle-emp-btn').addEventListener('click', function() {
+      const newActive = !isActiveEmployee(emp);
+      this.disabled = true;
+      apiPost({ action:'updateEmployee', id: emp.id, active: newActive }).then(res => {
+        this.disabled = false;
+        if (!res.ok) { alert('เกิดข้อผิดพลาด: ' + (res.error||'')); return; }
+        emp.active = newActive;
+        renderEmployeeList();
+        populateEmployeeSelect();
+      }).catch(err => { this.disabled=false; alert('เชื่อมต่อไม่ได้: '+err); });
+    });
+
+    row.querySelector('.save-emp-btn').addEventListener('click', function() {
+      const newCode = row.querySelector('.edit-emp-code').value.trim();
+      const newName = row.querySelector('.edit-emp-name').value.trim();
+      if (!newCode || !newName) { alert('กรุณากรอกรหัสและชื่อพนักงาน'); return; }
+      this.disabled = true; this.textContent = 'กำลังบันทึก...';
+      apiPost({ action:'updateEmployee', id: emp.id, emp_code: newCode, emp_name: newName }).then(res => {
+        this.disabled = false; this.textContent = 'บันทึก';
+        if (!res.ok) { alert('เกิดข้อผิดพลาด: ' + (res.error||'')); return; }
+        emp.emp_code = newCode; emp.emp_name = newName;
+        form.classList.remove('open');
+        renderEmployeeList();
+        populateEmployeeSelect();
+      }).catch(err => { this.disabled=false; this.textContent='บันทึก'; alert('เชื่อมต่อไม่ได้: '+err); });
+    });
+  });
+}
+
+document.getElementById('addEmpBtn').addEventListener('click', function() {
+  const codeInput = document.getElementById('newEmpCode');
+  const nameInput = document.getElementById('newEmpName');
+  const code = codeInput.value.trim();
+  const name = nameInput.value.trim();
+  if (!code || !name) { alert('กรุณากรอกรหัสและชื่อพนักงาน'); return; }
+  this.disabled = true; this.textContent = 'กำลังเพิ่ม...';
+  apiPost({ action:'addEmployee', emp_code: code, emp_name: name }).then(res => {
+    this.disabled = false; this.textContent = '+ เพิ่มพนักงาน';
+    if (!res.ok) { alert('เกิดข้อผิดพลาด: ' + (res.error||'')); return; }
+    employees.push({ id: res.id, emp_code: code, emp_name: name, active: true });
+    codeInput.value = ''; nameInput.value = '';
+    renderEmployeeList();
+    populateEmployeeSelect();
+  }).catch(err => { this.disabled=false; this.textContent='+ เพิ่มพนักงาน'; alert('เชื่อมต่อไม่ได้: '+err); });
+});
+
+/* ================= การนำทาง (bottom nav) ================= */
+document.querySelectorAll('.navbtn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.navbtn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    this.classList.add('active');
+    document.getElementById(this.dataset.view).classList.add('active');
+    if (this.dataset.view === 'view-admin') showAdminState();
+  });
+});
+
+/* ================= Settings modal ================= */
+const settingsModal = document.getElementById('settingsModal');
+document.getElementById('settingsBtn').addEventListener('click', () => {
+  document.getElementById('urlInput').value = APPS_SCRIPT_URL === DEFAULT_APPS_SCRIPT_URL ? '' : APPS_SCRIPT_URL;
+  settingsModal.classList.add('show');
+});
+document.getElementById('cancelSettings').addEventListener('click', () => settingsModal.classList.remove('show'));
+document.getElementById('resetDefaultSettings').addEventListener('click', () => {
+  localStorage.removeItem('apps_script_url');
+  APPS_SCRIPT_URL = DEFAULT_APPS_SCRIPT_URL;
+  settingsModal.classList.remove('show');
+  init();
+});
+document.getElementById('saveSettings').addEventListener('click', () => {
+  const v = document.getElementById('urlInput').value.trim();
+  if (!v) return;
+  APPS_SCRIPT_URL = v;
+  localStorage.setItem('apps_script_url', v);
+  settingsModal.classList.remove('show');
+  init();
+});
+
+/* ================= เริ่มต้นระบบ ================= */
+function init() {
+  if (!checkConfigured()) return;
+  setSyncStatus(true, 'กำลังโหลดข้อมูล...');
+  Promise.all([loadCompressors(), loadReadings({}), loadEmployees()]).then(() => {
+    setSyncStatus(true, '✅ เชื่อมต่อสำเร็จ');
+  }).catch(err => {
+    setSyncStatus(false, '⚠ เชื่อมต่อไม่ได้: ' + err.message);
+  });
+}
+init();
+</script>
+</body>
+</html>
