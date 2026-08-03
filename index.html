@@ -536,11 +536,17 @@ function oilGlassMinMaxKeys(idx) {
   return idx === 2 ? ['oillvl2_min','oillvl2_max'] : ['oillvl1_min','oillvl1_max'];
 }
 
+function oilGlassName(idx) {
+  if (idx === 1) return 'ตาบน';
+  if (idx === 2) return 'ตาล่าง';
+  return 'ตา ' + idx;
+}
+
 function buildOilGlassWidget(idx, c) {
   const wrapDiv = document.createElement('div');
   wrapDiv.className = 'oilglass-block';
   wrapDiv.dataset.glass = idx;
-  const glassTitle = getSightGlassCount(c) === 2 ? ('ระดับน้ำมัน — ตาแมวที่ ' + idx + ' (%)') : 'ระดับน้ำมัน (ตาแมว) (%)';
+  const glassTitle = getSightGlassCount(c) === 2 ? ('ระดับน้ำมัน — ' + oilGlassName(idx) + ' (%)') : 'ระดับน้ำมัน (ตาแมว) (%)';
   wrapDiv.innerHTML =
     '<div class="oilglass-label">🛢 ' + glassTitle + '</div>' +
     '<div class="oilglass-row">' +
@@ -731,8 +737,8 @@ function readingValueRows(r) {
       rows.push([def.label, r[def.field] + ' ' + def.unit]);
     }
   });
-  if (r.oil_level_1 !== '' && r.oil_level_1 !== undefined && r.oil_level_1 !== null) rows.push(['🛢 Oil Level (ตา 1)', r.oil_level_1 + ' %']);
-  if (r.oil_level_2 !== '' && r.oil_level_2 !== undefined && r.oil_level_2 !== null) rows.push(['🛢 Oil Level (ตา 2)', r.oil_level_2 + ' %']);
+  if (r.oil_level_1 !== '' && r.oil_level_1 !== undefined && r.oil_level_1 !== null) rows.push(['🛢 Oil Level (ตาบน)', r.oil_level_1 + ' %']);
+  if (r.oil_level_2 !== '' && r.oil_level_2 !== undefined && r.oil_level_2 !== null) rows.push(['🛢 Oil Level (ตาล่าง)', r.oil_level_2 + ' %']);
   if (r.capacity !== '' && r.capacity !== undefined && r.capacity !== null) rows.push(['Capacity', r.capacity + ' %']);
   if (r.low_cap !== '' && r.low_cap !== undefined && r.low_cap !== null) rows.push(['Low Cap', r.low_cap + ' %']);
   if (r.high_cap !== '' && r.high_cap !== undefined && r.high_cap !== null) rows.push(['High Cap', r.high_cap + ' %']);
@@ -803,8 +809,8 @@ function readingToExportRow(r) {
     'Oil Pressure (Bar)': r.oil_pressure,
     'Oil diff Pressure (Bar)': r.oil_diff_pressure,
     'Oil Temp (°C)': r.oil_temp,
-    'Oil Level ตา 1 (%)': r.oil_level_1,
-    'Oil Level ตา 2 (%)': r.oil_level_2,
+    'Oil Level ตาบน (%)': r.oil_level_1,
+    'Oil Level ตาล่าง (%)': r.oil_level_2,
     'Capacity (%)': r.capacity,
     'Low Cap (%)': r.low_cap,
     'High Cap (%)': r.high_cap,
@@ -985,9 +991,9 @@ function renderStdEditor(c) {
         '<option value="2"' + (glassCount===2?' selected':'') + '>2 ตา</option>' +
       '</select>' +
     '</div>' +
-    stdField('Oil Level ตาแมวที่ 1 (%)', 'oillvl1_min', 'oillvl1_max', c) +
+    stdField('Oil Level ตาบน (%)', 'oillvl1_min', 'oillvl1_max', c) +
     '<div id="oilLvl2Row" style="display:' + (glassCount===2?'block':'none') + ';">' +
-      stdField('Oil Level ตาแมวที่ 2 (%)', 'oillvl2_min', 'oillvl2_max', c) +
+      stdField('Oil Level ตาล่าง (%)', 'oillvl2_min', 'oillvl2_max', c) +
     '</div>';
   html += '<button class="save-std-btn" id="saveStdBtn">💾 บันทึกค่ามาตรฐาน</button>' +
   '</div>';
