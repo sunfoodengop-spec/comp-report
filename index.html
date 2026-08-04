@@ -121,6 +121,16 @@
   .daily-summary-num.zero { color:var(--green); }
   .daily-summary-label { font-size:13px; color:var(--muted); margin-top:4px; }
 
+  /* รายงานประจำวันแบบย่อ จัดกลุ่มตามโซน */
+  .daily-zone-group { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px 14px; margin-bottom:12px; box-shadow:var(--shadow); }
+  .daily-zone-header { display:flex; align-items:center; gap:8px; font-weight:700; font-size:13.5px; color:var(--accent); margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid var(--border); }
+  .daily-zone-count { margin-left:auto; font-size:11px; font-weight:700; color:var(--red); background:var(--red-soft); padding:2px 9px; border-radius:20px; }
+  .daily-compact-row { display:flex; align-items:baseline; gap:8px; padding:6px 0; font-size:12.5px; border-bottom:1px dashed var(--border); }
+  .daily-compact-row:last-child { border-bottom:none; padding-bottom:0; }
+  .daily-compact-time { color:var(--muted); font-size:11px; flex-shrink:0; width:38px; }
+  .daily-compact-comp { font-weight:700; color:var(--text); flex-shrink:0; }
+  .daily-compact-desc { color:var(--red); flex:1; min-width:0; }
+
   .std-editor-card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; box-shadow:var(--shadow); }
   .std-row { display:grid; grid-template-columns:1fr 70px 70px; gap:8px; align-items:center; margin-bottom:10px; }
   .std-row .std-label { font-size:12.5px; color:var(--muted); }
@@ -926,6 +936,15 @@ document.querySelectorAll('.subtab').forEach(tab => {
 });
 
 // ---- รายงานประจำวัน (เมื่อวานนี้) ----
+function shortAbnormalSummary(r) {
+  let text = '';
+  if (r.abnormal_params) text = String(r.abnormal_params).split(' | ').join(', ');
+  if (r.note && String(r.note).trim()) text = text ? (text + ' • ' + String(r.note).trim()) : String(r.note).trim();
+  if (!text) text = 'มีการบันทึกความผิดปกติ';
+  if (text.length > 90) text = text.slice(0, 90) + '…';
+  return text;
+}
+
 function renderDailyReport() {
   const now = new Date();
   const yStart = new Date(now); yStart.setDate(now.getDate()-1); yStart.setHours(0,0,0,0);
@@ -942,8 +961,39 @@ function renderDailyReport() {
     countEl.className = 'daily-summary-num' + (items.length===0 ? ' zero' : '');
     document.getElementById('dailyLabel').textContent =
       'ความผิดปกติที่พบเมื่อวานนี้ (' + yStart.toLocaleDateString('th-TH') + ')';
+
     const listEl = document.getElementById('dailyList');
-    listEl.innerHTML = items.length ? items.map(renderReadingCard).join('') : '<div class="empty-state">✅ ไม่พบความผิดปกติเมื่อวานนี้</div>';
+    if (!items.length) { listEl.innerHTML = '<div class="empty-state">✅ ไม่พบความผิดปกติเมื่อวานนี้</div>'; return; }
+
+    // จัดกลุ่มตามโซน/ห้อง (compressor ที่ยังไม่ได้กำหนดโซน จะรวมอยู่ท้ายสุด)
+    const groups = {};
+    items.forEach(r => {
+      const comp = compressors.find(c => String(c.id) === String(r.compressor_id));
+      const zone = (comp && comp.zone && String(comp.zone).trim()) ? String(comp.zone).trim() : 'ไม่ระบุโซน';
+      if (!groups[zone]) groups[zone] = [];
+      groups[zone].push(r);
+    });
+    const zoneNames = Object.keys(groups).sort((a, b) => {
+      if (a === 'ไม่ระบุโซน') return 1;
+      if (b === 'ไม่ระบุโซน') return -1;
+      return a.localeCompare(b, 'th');
+    });
+
+    listEl.innerHTML = zoneNames.map(zone => {
+      const rows = groups[zone].slice().sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      const rowsHtml = rows.map(r => {
+        const time = new Date(r.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+        return '<div class="daily-compact-row">' +
+          '<span class="daily-compact-time">' + time + '</span>' +
+          '<span class="daily-compact-comp">' + escapeHtml(r.no_label) + '</span>' +
+          '<span class="daily-compact-desc">' + escapeHtml(shortAbnormalSummary(r)) + '</span>' +
+        '</div>';
+      }).join('');
+      return '<div class="daily-zone-group">' +
+        '<div class="daily-zone-header">📍 ' + escapeHtml(zone) + '<span class="daily-zone-count">' + rows.length + ' รายการ</span></div>' +
+        rowsHtml +
+      '</div>';
+    }).join('');
   };
   loadReadings({all:true}).then(proceed).catch(proceed);
 }
@@ -984,6 +1034,10 @@ function renderStdEditor(c) {
   const isCompound = c.is_compound === true || c.is_compound === 'TRUE' || c.is_compound === 'true';
   const glassCount = getSightGlassCount(c);
   let html = '<div class="std-editor-card">' +
+    '<div class="std-row" style="margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid var(--border);">' +
+      '<div class="std-label" style="font-weight:700; color:var(--text);">📍 โซน/ห้อง (สำหรับจัดกลุ่มรายงานประจำวัน)</div>' +
+      '<input type="text" id="stdZone" data-key="zone" data-type="text" value="' + escapeHtml(c.zone || '') + '" placeholder="เช่น โซน Com 2,5" style="grid-column:2 / span 2; padding:8px; text-align:left;">' +
+    '</div>' +
     '<div class="std-head"><div>พารามิเตอร์</div><div>Min</div><div>Max</div></div>';
   PARAM_DEFS.forEach(def => { html += stdField(def.label + ' (' + def.unit + ')', def.minKey, def.maxKey, c); });
   if (isCompound) {
@@ -1014,7 +1068,11 @@ function renderStdEditor(c) {
   document.getElementById('saveStdBtn').addEventListener('click', function() {
     const standards = {};
     wrap.querySelectorAll('input[data-key], select[data-key]').forEach(input => {
-      standards[input.dataset.key] = input.value === '' ? '' : Number(input.value);
+      if (input.dataset.type === 'text') {
+        standards[input.dataset.key] = input.value;
+      } else {
+        standards[input.dataset.key] = input.value === '' ? '' : Number(input.value);
+      }
     });
     this.disabled = true; this.textContent = 'กำลังบันทึก...';
     apiPost({ action:'updateStandard', compressorId: c.id, standards: standards }).then(res => {
