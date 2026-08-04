@@ -671,7 +671,10 @@ function renderParamFields() {
   }
 }
 
+let isSubmittingReading = false;
+
 document.getElementById('submitBtn').addEventListener('click', function() {
+  if (isSubmittingReading) return; // กันกดซ้ำระหว่างกำลังบันทึกอยู่
   if (!selectedEmployee) { alert('กรุณาเลือกชื่อพนักงาน'); return; }
   if (!selectedCompressor) { alert('กรุณาเลือกเครื่อง Compressor'); return; }
 
@@ -682,10 +685,15 @@ document.getElementById('submitBtn').addEventListener('click', function() {
     if (input.value !== '') reading[input.dataset.field] = Number(input.value);
   });
   reading.note = document.getElementById('noteField').value.trim();
+  // รหัสอ้างอิงเฉพาะของการส่งครั้งนี้ — คงที่แม้ระบบจะลองส่งซ้ำอัตโนมัติ (retry) เบื้องหลัง
+  // เพื่อให้ฝั่งเซิร์ฟเวอร์รู้ว่าเป็นการส่งครั้งเดียวกัน ไม่สร้างแถวซ้ำ
+  reading.client_request_id = 'req_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
 
   const btn = this;
+  isSubmittingReading = true;
   btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
   apiPost({ action:'createReading', reading: reading }).then(res => {
+    isSubmittingReading = false;
     btn.disabled = false; btn.textContent = 'บันทึกข้อมูล';
     if (!res.ok) { alert('เกิดข้อผิดพลาด: ' + (res.error||'')); return; }
     const box = document.getElementById('logSuccess');
@@ -703,7 +711,7 @@ document.getElementById('submitBtn').addEventListener('click', function() {
     renderCompInfo(); renderParamFields();
     loadReadings();
     setTimeout(() => { box.innerHTML=''; }, 6000);
-  }).catch(err => { btn.disabled=false; btn.textContent='บันทึกข้อมูล'; alert('เชื่อมต่อไม่ได้: '+err); });
+  }).catch(err => { isSubmittingReading=false; btn.disabled=false; btn.textContent='บันทึกข้อมูล'; alert('เชื่อมต่อไม่ได้: '+err); });
 });
 
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
