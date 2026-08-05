@@ -370,6 +370,7 @@ const PARAM_DEFS = [
 // capacity แยกจัดการเอง เพราะขึ้นกับว่าเป็น Compound หรือไม่
 
 let compressors = [];
+let compressorsById = {};
 let readings = [];
 let employees = [];
 let selectedCompressor = null;
@@ -431,6 +432,8 @@ function loadCompressors() {
   return apiGet({ type:'compressors' }).then(res => {
     if (!res || !res.ok) throw new Error((res && res.error) || 'load compressors failed');
     compressors = Array.isArray(res.compressors) ? res.compressors : [];
+    compressorsById = {};
+    compressors.forEach(c => { compressorsById[c.id] = c; });
     populateCompressorSelects();
   });
 }
@@ -741,7 +744,48 @@ function loadReadings(opts) {
   });
 }
 
-function isAbnormalRow(r) { return r.is_abnormal === true || r.is_abnormal === 'TRUE' || r.is_abnormal === 'true'; }
+// รายการพารามิเตอร์ที่ใช้ประเมิน "ผิดปกติ" แบบสด — ยึดค่ามาตรฐานปัจจุบันของเครื่องเสมอ (ไม่ใช่ค่าที่บันทึกแช่แข็งไว้ตอนกรอกครั้งแรก)
+// ทำให้ถ้าแอดมินแก้ไข/ลบค่ามาตรฐานภายหลัง ประวัติเก่าจะอัปเดตสถานะผิดปกติตามทันที ไม่ต้องรอ หรือไม่มีทางค้างเป็นค่าเก่า
+const ABNORMAL_CHECK_LIST = [
+  ['suction_pressure', 'sp_min', 'sp_max', 'Suction Pressure (Bar)'],
+  ['suction_temp', 'st_min', 'st_max', 'Suction Temperature (°C)'],
+  ['discharge_pressure', 'dp_min', 'dp_max', 'Discharge Pressure (Bar)'],
+  ['discharge_temp', 'dt_min', 'dt_max', 'Discharge Temperature (°C)'],
+  ['oil_pressure', 'op_min', 'op_max', 'Oil Pressure (Bar)'],
+  ['oil_diff_pressure', 'odp_min', 'odp_max', 'Oil diff Pressure (Bar)'],
+  ['oil_temp', 'ot_min', 'ot_max', 'Oil Temperature (°C)'],
+  ['oil_level_1', 'oillvl1_min', 'oillvl1_max', 'Oil Level ตาบน (%)'],
+  ['oil_level_2', 'oillvl2_min', 'oillvl2_max', 'Oil Level ตาล่าง (%)'],
+  ['capacity', 'cap_min', 'cap_max', 'Capacity (%)'],
+  ['low_cap', 'lowcap_min', 'lowcap_max', 'Low Capacity (%)'],
+  ['high_cap', 'highcap_min', 'highcap_max', 'High Capacity (%)'],
+  ['motor_current', 'mc_min', 'mc_max', 'Motor Current (A)']
+];
+
+function computeAbnormal(r) {
+  const comp = compressorsById[r.compressor_id];
+  const list = [];
+  ABNORMAL_CHECK_LIST.forEach(pc => {
+    const field = pc[0], minKey = pc[1], maxKey = pc[2], label = pc[3];
+    const val = r[field];
+    if (val === '' || val === undefined || val === null) return;
+    const num = Number(val);
+    if (isNaN(num)) return;
+    const min = comp ? comp[minKey] : '';
+    const max = comp ? comp[maxKey] : '';
+    const hasMin = min !== '' && min !== null && min !== undefined;
+    const hasMax = max !== '' && max !== null && max !== undefined;
+    if (hasMin && num < Number(min)) {
+      list.push(label + ': ' + num + ' (ต่ำกว่ามาตรฐาน ' + min + (hasMax ? '-' + max : '') + ')');
+    } else if (hasMax && num > Number(max)) {
+      list.push(label + ': ' + num + ' (สูงกว่ามาตรฐาน ' + (hasMin ? min + '-' : '') + max + ')');
+    }
+  });
+  const hasNote = r.note && String(r.note).trim() !== '';
+  return { isAbnormal: list.length > 0 || hasNote, list: list };
+}
+
+function isAbnormalRow(r) { return computeAbnormal(r).isAbnormal; }
 
 function fmtDate(d) {
   const dt = new Date(d);
@@ -764,7 +808,8 @@ function readingValueRows(r) {
 }
 
 function renderReadingCard(r) {
-  const abn = isAbnormalRow(r);
+  const computed = computeAbnormal(r);
+  const abn = computed.isAbnormal;
   const vals = readingValueRows(r);
   return '<div class="reading-card' + (abn?' abnormal':'') + '">' +
     '<div class="reading-top">' +
@@ -774,7 +819,7 @@ function renderReadingCard(r) {
     (abn ? '<div class="abn-badge">⚠ พบความผิดปกติ</div>' : '<div class="ok-badge">✔ ปกติ</div>') +
     '<div class="reading-emp">👤 ' + escapeHtml(r.employee_name) + ' (' + escapeHtml(r.employee_code) + ')</div>' +
     '<div class="reading-vals">' + vals.map(v => '<div class="k">'+v[0]+'</div><div class="v">'+v[1]+'</div>').join('') + '</div>' +
-    (r.abnormal_params ? '<div class="reading-abn-list">' + escapeHtml(r.abnormal_params).split(' | ').join('<br>') + '</div>' : '') +
+    (computed.list.length ? '<div class="reading-abn-list">' + computed.list.map(escapeHtml).join('<br>') + '</div>' : '') +
     (r.note ? '<div class="reading-note">📝 ' + escapeHtml(r.note) + '</div>' : '') +
   '</div>';
 }
@@ -814,6 +859,7 @@ function sanitizeFilename(s) {
 }
 
 function readingToExportRow(r) {
+  const computed = computeAbnormal(r);
   return {
     'วันที่-เวลา': fmtDate(r.timestamp),
     'เครื่อง': r.no_label,
@@ -834,8 +880,8 @@ function readingToExportRow(r) {
     'High Cap (%)': r.high_cap,
     'Motor Current (A)': r.motor_current,
     'ความผิดปกติอื่นๆ': r.note,
-    'รายการที่เกินมาตรฐาน': r.abnormal_params,
-    'สถานะ': isAbnormalRow(r) ? 'ผิดปกติ' : 'ปกติ'
+    'รายการที่เกินมาตรฐาน': computed.list.join(' | '),
+    'สถานะ': computed.isAbnormal ? 'ผิดปกติ' : 'ปกติ'
   };
 }
 
@@ -937,8 +983,8 @@ document.querySelectorAll('.subtab').forEach(tab => {
 
 // ---- รายงานประจำวัน (เมื่อวานนี้) ----
 function shortAbnormalSummary(r) {
-  let text = '';
-  if (r.abnormal_params) text = String(r.abnormal_params).split(' | ').join(', ');
+  const computed = computeAbnormal(r);
+  let text = computed.list.join(', ');
   if (r.note && String(r.note).trim()) text = text ? (text + ' • ' + String(r.note).trim()) : String(r.note).trim();
   if (!text) text = 'มีการบันทึกความผิดปกติ';
   if (text.length > 90) text = text.slice(0, 90) + '…';
@@ -1213,6 +1259,12 @@ function init() {
   });
 }
 init();
+
+// รีเฟรชค่ามาตรฐานเครื่อง Compressor เงียบๆ ทุก 5 นาที เผื่อแอดมินแก้ไขค่ามาตรฐานระหว่างที่หน้าเว็บเปิดค้างไว้นาน
+// จะได้เห็นผลอัตโนมัติโดยไม่ต้อง reload หน้าเว็บเอง (ไม่มีตัวโหลดให้เห็น ไม่รบกวนการใช้งาน)
+setInterval(() => {
+  loadCompressors().then(() => { renderHistory(); }).catch(() => { /* เงียบไว้ ไม่รบกวนผู้ใช้ */ });
+}, 5 * 60 * 1000);
 </script>
 </body>
 </html>
