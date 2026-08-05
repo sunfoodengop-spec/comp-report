@@ -54,7 +54,11 @@
   .field select:focus, .field input:focus, .field textarea:focus { outline:none; border-color:var(--accent); }
   .field textarea { resize:vertical; min-height:80px; }
   .field input.warn { border-color:var(--red); background:var(--red-soft); }
-  .field-warn-text { font-size:11.5px; color:var(--red); margin-top:5px; font-weight:600; }
+  .field-warn-text { font-size:11.5px; color:var(--red); margin-top:5px; font-weight:600; flex-basis:100%; }
+  .numeric-input-row { display:flex; gap:8px; flex-wrap:wrap; }
+  .numeric-input-row input { flex:1; min-width:120px; }
+  .sign-toggle-btn { flex-shrink:0; width:50px; border-radius:10px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:19px; font-weight:800; cursor:pointer; }
+  .sign-toggle-btn:active { background:var(--accent-soft); border-color:var(--accent); color:var(--accent); }
   .two-col { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 
   .compressor-info { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:16px; font-size:12.5px; color:var(--muted); box-shadow:var(--shadow); }
@@ -518,6 +522,23 @@ function renderCompInfo() {
     (isCompound ? '<div class="compound-badge">⚠ เครื่องนี้เป็น Compound — ต้องกรอก Low cap และ High cap แยกกัน</div>' : '');
 }
 
+// มือถือหลายรุ่น (โดยเฉพาะ Android) ไม่มีปุ่มลบ (-) บนคีย์บอร์ดตัวเลขให้กด แม้จะใช้ type="number" ก็ตาม
+// จึงเปลี่ยนช่องเหล่านี้เป็น type="text" (พิมพ์ได้อิสระ) + ปุ่ม ± ให้กดสลับค่าบวก/ลบแทน ใช้ได้ทุกอุปกรณ์แน่นอน
+function sanitizeNumericInput(input) {
+  let v = input.value;
+  const negative = v.trim().indexOf('-') === 0;
+  v = v.replace(/[^0-9.]/g, ''); // เหลือแค่ตัวเลขกับจุดทศนิยม
+  const dotIdx = v.indexOf('.');
+  if (dotIdx !== -1) v = v.slice(0, dotIdx + 1) + v.slice(dotIdx + 1).replace(/\./g, ''); // กันจุดทศนิยมซ้ำ
+  input.value = (negative ? '-' : '') + v;
+}
+
+function toggleInputSign(input) {
+  const v = input.value.trim();
+  if (v === '' || v === '-') { input.value = v === '-' ? '' : '-'; return; }
+  input.value = v.indexOf('-') === 0 ? v.slice(1) : ('-' + v);
+}
+
 function fieldWarnCheck(input, c, minKey, maxKey) {
   const warnEl = input.parentElement.querySelector('.field-warn-text');
   const val = input.value;
@@ -647,10 +668,21 @@ function renderParamFields() {
     const div = document.createElement('div');
     div.className = 'field';
     div.innerHTML = '<label>' + def.label + ' (' + def.unit + ')</label>' +
-      '<input type="number" step="0.01" data-field="' + def.field + '">';
+      '<div class="numeric-input-row">' +
+        '<input type="text" inputmode="decimal" data-field="' + def.field + '">' +
+        '<button type="button" class="sign-toggle-btn" title="สลับค่าบวก/ลบ">±</button>' +
+      '</div>';
     wrap.appendChild(div);
     const input = div.querySelector('input');
-    input.addEventListener('input', () => fieldWarnCheck(input, c, def.minKey, def.maxKey));
+    const toggleBtn = div.querySelector('.sign-toggle-btn');
+    input.addEventListener('input', () => {
+      sanitizeNumericInput(input);
+      fieldWarnCheck(input, c, def.minKey, def.maxKey);
+    });
+    toggleBtn.addEventListener('click', () => {
+      toggleInputSign(input);
+      fieldWarnCheck(input, c, def.minKey, def.maxKey);
+    });
   });
 
   // ระดับน้ำมัน (ตาแมว) — 1 หรือ 2 ตา ตามที่แอดมินตั้งค่าไว้ต่อเครื่อง
@@ -695,7 +727,9 @@ document.getElementById('submitBtn').addEventListener('click', function() {
 
   const reading = { compressor_id: selectedCompressor.id, employee_name: selectedEmployee.emp_name, employee_code: selectedEmployee.emp_code };
   document.querySelectorAll('#paramFields input[data-field]').forEach(input => {
-    if (input.value !== '') reading[input.dataset.field] = Number(input.value);
+    if (input.value !== '' && input.value !== '-' && !isNaN(Number(input.value))) {
+      reading[input.dataset.field] = Number(input.value);
+    }
   });
   reading.note = document.getElementById('noteField').value.trim();
   // รหัสอ้างอิงเฉพาะของการส่งครั้งนี้ — คงที่แม้ระบบจะลองส่งซ้ำอัตโนมัติ (retry) เบื้องหลัง
