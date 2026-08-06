@@ -6,6 +6,7 @@
 <!-- ⚠️ แก้ชื่อเรื่อง/ชื่อโรงงานตรงนี้ตามหน่วยงานที่ใช้งานจริง -->
 <title>ระบบบันทึกค่า Compressor</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root {
     /* โทนสบายตา: ขาวนวล 60% / เลือดหมู 30% / เทาเข้ม 10% */
@@ -276,7 +277,7 @@
       <div class="lock-bar">
         <span>🔓 เข้าสู่ระบบแอดมินแล้ว</span>
         <div>
-          <button id="refreshCacheBtn" style="margin-right:10px;">🔄 รีเฟรชข้อมูล</button>
+          <button id="refreshCacheBtn" style="margin-right:10px;">🔄 โหลดข้อมูลใหม่</button>
           <button id="lockBtn">ล็อก</button>
         </div>
       </div>
@@ -341,9 +342,11 @@
 <!-- Settings modal -->
 <div class="modal-overlay" id="settingsModal">
   <div class="modal-box">
-    <h3>⚙ ตั้งค่าการเชื่อมต่อ</h3>
-    <label style="font-size:12.5px;color:var(--muted);display:block;margin-bottom:6px;">Apps Script Web App URL</label>
-    <input type="text" id="urlInput" placeholder="https://script.google.com/macros/s/xxx/exec">
+    <h3>⚙ ตั้งค่าการเชื่อมต่อ Supabase</h3>
+    <label style="font-size:12.5px;color:var(--muted);display:block;margin-bottom:6px;">Supabase Project URL</label>
+    <input type="text" id="urlInput" placeholder="https://xxxxx.supabase.co">
+    <label style="font-size:12.5px;color:var(--muted);display:block;margin-bottom:6px;">Supabase anon public key</label>
+    <input type="text" id="keyInput" placeholder="eyJhbGciOi...">
     <div class="modal-btns">
       <button class="btn-secondary" id="resetDefaultSettings">ใช้ค่าเริ่มต้น</button>
       <button class="btn-secondary" id="cancelSettings">ยกเลิก</button>
@@ -353,12 +356,20 @@
 </div>
 
 <script>
-// ⚠️ วาง Web App URL ของ Apps Script ที่ deploy แล้วตรงนี้ (ลงท้ายด้วย /exec)
-const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwBGl227UDL8EHZQeJHf8SVZHrDUeoV1YFRVlXI84UL9v1lL6drt1fbOmMCh1PwnCLpwA/exec';
-let APPS_SCRIPT_URL = localStorage.getItem('apps_script_url') || DEFAULT_APPS_SCRIPT_URL;
+// ⚠️ วาง Supabase Project URL และ anon public key ตรงนี้ (ดูได้จาก Supabase > Project Settings > API)
+const DEFAULT_SUPABASE_URL = 'https://cidagyoawoivpagoousp.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNpZGFneW9hd29pdnBhZ29vdXNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMjQzMDMsImV4cCI6MjEwMTYwMDMwM30.tHCir-_st64bbYhbk3j5NjHpAHlkmMabHuKssLdVYEQ';
+let SUPABASE_URL = localStorage.getItem('supabase_url') || DEFAULT_SUPABASE_URL;
+let SUPABASE_ANON_KEY = localStorage.getItem('supabase_anon_key') || DEFAULT_SUPABASE_ANON_KEY;
+let sb = null;
+function getSbClient() {
+  if (!sb) sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  return sb;
+}
+function resetSbClient() { sb = null; }
 
 // ⚠️ นี่เป็นเพียงการป้องกันขั้นพื้นฐาน (PIN อยู่ใน source code ของหน้าเว็บ) ไม่ใช่ระบบยืนยันตัวตนจริง
-// หากต้องการความปลอดภัยที่มากกว่านี้ ควรใช้ระบบล็อกอินแบบเซิร์ฟเวอร์
+// หากต้องการความปลอดภัยที่มากกว่านี้ ควรใช้ระบบล็อกอินแบบเซิร์ฟเวอร์ (เช่น Supabase Auth)
 const ADMIN_PIN = '4120';
 
 // ---------- พารามิเตอร์ที่ต้องกรอก ----------
@@ -381,40 +392,15 @@ let employees = [];
 let selectedCompressor = null;
 let selectedEmployee = null;
 
-// Google Apps Script บางครั้งตอบกลับเป็นหน้า HTML (เช่น timeout หรือระบบสะดุดชั่วคราว) แทนที่จะเป็น JSON
-// โดยเฉพาะเมื่อมีคนใช้งานพร้อมกันหลายคน — ฟังก์ชันนี้จะลองใหม่อัตโนมัติก่อนแจ้ง error ให้ผู้ใช้เห็น
-function fetchJsonWithRetry(url, options, attemptsLeft) {
-  if (attemptsLeft === undefined) attemptsLeft = 4; // ลองรวมทั้งหมด 5 ครั้ง (ครั้งแรก + retry 4 ครั้ง) ให้เวลาเซิร์ฟเวอร์ฟื้นตัวมากขึ้น
-  return fetch(url, options)
-    .then(r => r.text())
-    .then(text => {
-      try {
-        return JSON.parse(text);
-      } catch (e) {
-        if (attemptsLeft > 0) {
-          return new Promise(resolve => setTimeout(resolve, 1200)).then(() => fetchJsonWithRetry(url, options, attemptsLeft - 1));
-        }
-        throw new Error('เซิร์ฟเวอร์ตอบกลับไม่ถูกต้องชั่วคราว (อาจมีผู้ใช้งานพร้อมกันหลายคน) กรุณาลองใหม่อีกครั้ง');
-      }
-    })
-    .catch(err => {
-      if (err instanceof TypeError && attemptsLeft > 0) {
-        // เช่น เชื่อมต่อเน็ตหลุดชั่วขณะ — ลองใหม่เช่นกัน
-        return new Promise(resolve => setTimeout(resolve, 1200)).then(() => fetchJsonWithRetry(url, options, attemptsLeft - 1));
-      }
-      throw err;
-    });
-}
-
-function apiGet(params) {
-  const qs = new URLSearchParams(params).toString();
-  return fetchJsonWithRetry(APPS_SCRIPT_URL + '?' + qs);
-}
-function apiPost(body) {
-  return fetchJsonWithRetry(APPS_SCRIPT_URL, {
-    method: 'POST',
-    headers: {'Content-Type':'text/plain;charset=utf-8'},
-    body: JSON.stringify(body)
+// Supabase เป็นบริการที่ทำงานตลอดเวลา (ไม่มี cold start เหมือน Apps Script) จึงไม่ค่อยล้มเหลวแบบสุ่ม
+// แต่ยังคง retry เบาๆ ไว้เผื่อเน็ตของผู้ใช้หลุดชั่วขณะ (ความล้มเหลวระดับเครือข่ายเท่านั้น ไม่ retry error จากตัวคำสั่งเอง)
+function withRetry(fn, attemptsLeft) {
+  if (attemptsLeft === undefined) attemptsLeft = 2;
+  return fn().catch(err => {
+    if (attemptsLeft > 0) {
+      return new Promise(resolve => setTimeout(resolve, 900)).then(() => withRetry(fn, attemptsLeft - 1));
+    }
+    throw err;
   });
 }
 
@@ -425,8 +411,10 @@ function setSyncStatus(ok, msg) {
 }
 
 function checkConfigured() {
-  if (!APPS_SCRIPT_URL || APPS_SCRIPT_URL === 'PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE') {
-    setSyncStatus(false, '⚠ ยังไม่ได้ตั้งค่า URL - กดปุ่ม ⚙');
+  const urlBad = !SUPABASE_URL || SUPABASE_URL.indexOf('PASTE_YOUR') === 0;
+  const keyBad = !SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.indexOf('PASTE_YOUR') === 0;
+  if (urlBad || keyBad) {
+    setSyncStatus(false, '⚠ ยังไม่ได้ตั้งค่า Supabase - กดปุ่ม ⚙');
     return false;
   }
   return true;
@@ -434,9 +422,9 @@ function checkConfigured() {
 
 /* ================= โหลดข้อมูลเครื่อง Compressor ================= */
 function loadCompressors() {
-  return apiGet({ type:'compressors' }).then(res => {
-    if (!res || !res.ok) throw new Error((res && res.error) || 'load compressors failed');
-    compressors = Array.isArray(res.compressors) ? res.compressors : [];
+  return withRetry(() => getSbClient().from('compressors').select('*').order('id')).then(({data, error}) => {
+    if (error) throw new Error(error.message);
+    compressors = Array.isArray(data) ? data : [];
     compressorsById = {};
     compressors.forEach(c => { compressorsById[c.id] = c; });
     populateCompressorSelects();
@@ -471,9 +459,9 @@ function populateCompressorSelects() {
 function isActiveEmployee(e) { return e.active === true || e.active === 'TRUE' || e.active === 'true'; }
 
 function loadEmployees() {
-  return apiGet({ type:'employees' }).then(res => {
-    if (!res || !res.ok) throw new Error((res && res.error) || 'load employees failed');
-    employees = Array.isArray(res.employees) ? res.employees : [];
+  return withRetry(() => getSbClient().from('employees').select('*').order('emp_name')).then(({data, error}) => {
+    if (error) throw new Error(error.message);
+    employees = Array.isArray(data) ? data : [];
     populateEmployeeSelect();
     if (document.getElementById('sub-emp').classList.contains('active')) renderEmployeeList();
   });
@@ -719,12 +707,13 @@ function renderParamFields() {
 
 let isSubmittingReading = false;
 
-function handleReadingSaveSuccess(res, recovered) {
+function handleReadingSaveSuccess(row, recovered) {
+  const computed = computeAbnormal(row);
   const box = document.getElementById('logSuccess');
-  const prefix = recovered ? '✅ บันทึกสำเร็จแล้ว (ระบบตรวจสอบย้อนหลังให้ เนื่องจากตอบกลับช้าไปครั้งแรก)' : null;
-  if (res.is_abnormal) {
+  const prefix = recovered ? '✅ บันทึกสำเร็จแล้ว (พบว่าบันทึกไปแล้วจากการลองส่งซ้ำครั้งก่อน)' : null;
+  if (computed.isAbnormal) {
     box.innerHTML = '<div class="success-banner abn">⚠ ' + (prefix || 'บันทึกสำเร็จ') + ' — พบค่าผิดปกติ!' +
-      (res.abnormal_params && res.abnormal_params.length ? ('<ul>' + res.abnormal_params.map(a=>'<li>'+escapeHtml(a)+'</li>').join('') + '</ul>') : '') +
+      (computed.list.length ? ('<ul>' + computed.list.map(a=>'<li>'+escapeHtml(a)+'</li>').join('') + '</ul>') : '') +
       '</div>';
   } else {
     box.innerHTML = '<div class="success-banner">' + (prefix || '✅ บันทึกสำเร็จ') + (prefix ? '' : ' — ค่าทั้งหมดอยู่ในเกณฑ์ปกติ') + '</div>';
@@ -745,45 +734,49 @@ document.getElementById('submitBtn').addEventListener('click', function() {
 
   localStorage.setItem('emp_code', selectedEmployee.emp_code);
 
-  const reading = { compressor_id: selectedCompressor.id, employee_name: selectedEmployee.emp_name, employee_code: selectedEmployee.emp_code };
+  const row = {
+    compressor_id: selectedCompressor.id,
+    no_label: selectedCompressor.no_label,
+    load_area: selectedCompressor.load_area,
+    employee_name: selectedEmployee.emp_name,
+    employee_code: selectedEmployee.emp_code,
+    note: document.getElementById('noteField').value.trim(),
+    // รหัสอ้างอิงเฉพาะของการส่งครั้งนี้ — ฐานข้อมูลบังคับห้ามซ้ำ (unique constraint) กันข้อมูลซ้ำจากการลองส่งซ้ำอัตโนมัติ/กดซ้ำได้แน่นอน 100%
+    client_request_id: 'req_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10)
+  };
   document.querySelectorAll('#paramFields input[data-field]').forEach(input => {
     if (input.value !== '' && input.value !== '-' && !isNaN(Number(input.value))) {
-      reading[input.dataset.field] = Number(input.value);
+      row[input.dataset.field] = Number(input.value);
     }
   });
-  reading.note = document.getElementById('noteField').value.trim();
-  // รหัสอ้างอิงเฉพาะของการส่งครั้งนี้ — คงที่แม้ระบบจะลองส่งซ้ำอัตโนมัติ (retry) เบื้องหลัง
-  // เพื่อให้ฝั่งเซิร์ฟเวอร์รู้ว่าเป็นการส่งครั้งเดียวกัน ไม่สร้างแถวซ้ำ
-  const clientRequestId = 'req_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
-  reading.client_request_id = clientRequestId;
 
   const btn = this;
   isSubmittingReading = true;
   btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
 
-  apiPost({ action:'createReading', reading: reading }).then(res => {
-    isSubmittingReading = false;
-    btn.disabled = false; btn.textContent = 'บันทึกข้อมูล';
-    if (!res.ok) { alert('เกิดข้อผิดพลาด: ' + (res.error||'')); return; }
-    handleReadingSaveSuccess(res, false);
-  }).catch(err => {
-    // ลองถามเซิร์ฟเวอร์อีกครั้งว่าจริงๆ แล้วบันทึกสำเร็จไปแล้วหรือยัง (เผื่อ retry ก่อนหน้าสำเร็จแต่คำตอบมาไม่ถึง)
-    // ป้องกันทั้งการแจ้ง error หลอกๆ ทั้งที่บันทึกแล้ว และป้องกันการกดซ้ำจนเกิดข้อมูลซ้ำ
-    btn.textContent = 'กำลังตรวจสอบ...';
-    apiPost({ action:'checkSubmitStatus', client_request_id: clientRequestId }).then(checkRes => {
-      isSubmittingReading = false;
-      btn.disabled = false; btn.textContent = 'บันทึกข้อมูล';
-      if (checkRes && checkRes.ok && checkRes.found && checkRes.result) {
-        handleReadingSaveSuccess(checkRes.result, true);
-      } else {
-        alert('เชื่อมต่อไม่ได้: ' + err + '\n\nระบบยืนยันแล้วว่ายังไม่ได้บันทึกข้อมูลนี้ กรุณากดบันทึกใหม่อีกครั้งได้เลย ไม่ซ้ำแน่นอน');
+  withRetry(() => getSbClient().from('readings').insert([row]).select().single())
+    .then(({ data, error }) => {
+      if (!error) return { savedRow: data, recovered: false };
+      if (error.code === '23505') {
+        // รหัสนี้เคยบันทึกไปแล้ว (จาก retry ที่ซ้อนกัน) — ดึงแถวเดิมมาแสดงผลแทน ไม่สร้างซ้ำ
+        return getSbClient().from('readings').select('*').eq('client_request_id', row.client_request_id).single()
+          .then(({ data: existing, error: err2 }) => {
+            if (err2) throw new Error(err2.message);
+            return { savedRow: existing, recovered: true };
+          });
       }
-    }).catch(() => {
+      throw new Error(error.message);
+    })
+    .then(({ savedRow, recovered }) => {
       isSubmittingReading = false;
       btn.disabled = false; btn.textContent = 'บันทึกข้อมูล';
-      alert('เชื่อมต่อไม่ได้: ' + err + '\n\nกรุณาตรวจสอบหน้า "ประวัติ" ก่อนกดบันทึกซ้ำ เพื่อความชัวร์ว่ายังไม่ได้บันทึกไปแล้ว');
+      handleReadingSaveSuccess(savedRow, recovered);
+    })
+    .catch(err => {
+      isSubmittingReading = false;
+      btn.disabled = false; btn.textContent = 'บันทึกข้อมูล';
+      alert('เชื่อมต่อไม่ได้: ' + (err.message || err) + '\n\nยังไม่ได้บันทึกข้อมูล กรุณาลองกดบันทึกใหม่อีกครั้งได้เลย ไม่ซ้ำแน่นอน');
     });
-  });
 });
 
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -793,13 +786,21 @@ let histAbnFilter = 'all';
 
 function loadReadings(opts) {
   opts = opts || {};
-  const params = {};
-  if (opts.all) params.all = '1';
-  return apiGet(params).then(res => {
-    if (!res || !res.ok) throw new Error((res && res.error) || 'load readings failed');
-    readings = Array.isArray(res.readings) ? res.readings : [];
+  const buildQuery = () => {
+    let q = getSbClient().from('readings').select('*').order('timestamp', { ascending: false });
+    if (opts.all) {
+      q = q.limit(20000); // กันดึงมากเกินไปแบบไม่จำกัดเลยในกรณีข้อมูลสะสมเยอะมากๆ
+    } else {
+      const d = new Date(); d.setDate(d.getDate() - 30);
+      q = q.gte('timestamp', d.toISOString());
+    }
+    return q;
+  };
+  return withRetry(buildQuery).then(({ data, error }) => {
+    if (error) throw new Error(error.message);
+    readings = Array.isArray(data) ? data : [];
     renderHistory();
-    return res;
+    return { readings };
   });
 }
 
@@ -961,10 +962,10 @@ document.getElementById('exportFilteredBtn').addEventListener('click', function(
 document.getElementById('exportAllByCompBtn').addEventListener('click', function() {
   const btn = this;
   btn.disabled = true; btn.textContent = 'กำลังเตรียมไฟล์...';
-  apiGet({ all: '1' }).then(res => {
+  withRetry(() => getSbClient().from('readings').select('*').order('timestamp', { ascending: false }).limit(20000)).then(({ data, error }) => {
     btn.disabled = false; btn.textContent = '📤 Export ทั้งหมด (แยกชีทตามเครื่อง)';
-    if (!res.ok) { alert('เกิดข้อผิดพลาด: ' + (res.error||'')); return; }
-    const all = res.readings;
+    if (error) { alert('เกิดข้อผิดพลาด: ' + error.message); return; }
+    const all = data || [];
     if (!all.length) { alert('ยังไม่มีข้อมูลในระบบ'); return; }
 
     const wb = XLSX.utils.book_new();
@@ -985,7 +986,7 @@ document.getElementById('exportAllByCompBtn').addEventListener('click', function
     });
 
     XLSX.writeFile(wb, 'compressor_log_all_by_machine_' + new Date().toISOString().slice(0,10) + '.xlsx');
-  }).catch(err => { btn.disabled=false; btn.textContent='📤 Export ทั้งหมด (แยกชีทตามเครื่อง)'; alert('เชื่อมต่อไม่ได้: '+err); });
+  }).catch(err => { btn.disabled=false; btn.textContent='📤 Export ทั้งหมด (แยกชีทตามเครื่อง)'; alert('เชื่อมต่อไม่ได้: '+(err.message||err)); });
 });
 
 /* ================= TAB 3: แอดมิน ================= */
@@ -1016,15 +1017,14 @@ document.getElementById('lockBtn').addEventListener('click', function() {
 });
 document.getElementById('refreshCacheBtn').addEventListener('click', function() {
   const btn = this;
-  btn.disabled = true; btn.textContent = 'กำลังรีเฟรช...';
-  apiPost({ action:'clearCache' }).then(res => {
-    return Promise.all([loadCompressors(), loadEmployees()]);
-  }).then(() => {
-    btn.disabled = false; btn.textContent = '🔄 รีเฟรชข้อมูล';
-    alert('รีเฟรชข้อมูลเรียบร้อย — ดึงค่าล่าสุดจาก Google Sheet แล้ว');
+  btn.disabled = true; btn.textContent = 'กำลังโหลด...';
+  Promise.all([loadCompressors(), loadEmployees()]).then(() => {
+    btn.disabled = false; btn.textContent = '🔄 โหลดข้อมูลใหม่';
+    renderHistory();
+    alert('โหลดข้อมูลล่าสุดเรียบร้อย');
   }).catch(err => {
-    btn.disabled = false; btn.textContent = '🔄 รีเฟรชข้อมูล';
-    alert('เชื่อมต่อไม่ได้: ' + err);
+    btn.disabled = false; btn.textContent = '🔄 โหลดข้อมูลใหม่';
+    alert('เชื่อมต่อไม่ได้: ' + (err.message || err));
   });
 });
 
@@ -1128,8 +1128,8 @@ document.getElementById('stdCompSelect').addEventListener('change', function() {
 function stdField(label, minKey, maxKey, c) {
   return '<div class="std-row">' +
     '<div class="std-label">' + label + '</div>' +
-    '<input type="number" step="0.01" data-key="' + minKey + '" value="' + (c[minKey]!==''&&c[minKey]!==undefined?c[minKey]:'') + '" placeholder="min">' +
-    '<input type="number" step="0.01" data-key="' + maxKey + '" value="' + (c[maxKey]!==''&&c[maxKey]!==undefined?c[maxKey]:'') + '" placeholder="max">' +
+    '<input type="number" step="0.01" data-key="' + minKey + '" value="' + (c[minKey]!==''&&c[minKey]!==null&&c[minKey]!==undefined?c[minKey]:'') + '" placeholder="min">' +
+    '<input type="number" step="0.01" data-key="' + maxKey + '" value="' + (c[maxKey]!==''&&c[maxKey]!==null&&c[maxKey]!==undefined?c[maxKey]:'') + '" placeholder="max">' +
   '</div>';
 }
 
@@ -1176,16 +1176,17 @@ function renderStdEditor(c) {
       if (input.dataset.type === 'text') {
         standards[input.dataset.key] = input.value;
       } else {
-        standards[input.dataset.key] = input.value === '' ? '' : Number(input.value);
+        standards[input.dataset.key] = input.value === '' ? null : Number(input.value);
       }
     });
     this.disabled = true; this.textContent = 'กำลังบันทึก...';
-    apiPost({ action:'updateStandard', compressorId: c.id, standards: standards }).then(res => {
+    withRetry(() => getSbClient().from('compressors').update(standards).eq('id', c.id).select().single()).then(({ data, error }) => {
       this.disabled = false; this.textContent = '💾 บันทึกค่ามาตรฐาน';
-      if (!res.ok) { alert('เกิดข้อผิดพลาด: ' + (res.error||'')); return; }
-      Object.keys(standards).forEach(k => c[k] = standards[k]);
+      if (error) { alert('เกิดข้อผิดพลาด: ' + error.message); return; }
+      Object.assign(c, data);
+      compressorsById[c.id] = c;
       alert('บันทึกค่ามาตรฐานเรียบร้อย');
-    }).catch(err => { this.disabled=false; this.textContent='💾 บันทึกค่ามาตรฐาน'; alert('เชื่อมต่อไม่ได้: '+err); });
+    }).catch(err => { this.disabled=false; this.textContent='💾 บันทึกค่ามาตรฐาน'; alert('เชื่อมต่อไม่ได้: '+(err.message||err)); });
   });
 }
 
@@ -1231,13 +1232,13 @@ function renderEmployeeList() {
     row.querySelector('.toggle-emp-btn').addEventListener('click', function() {
       const newActive = !isActiveEmployee(emp);
       this.disabled = true;
-      apiPost({ action:'updateEmployee', id: emp.id, active: newActive }).then(res => {
+      withRetry(() => getSbClient().from('employees').update({ active: newActive }).eq('id', emp.id).select().single()).then(({ data, error }) => {
         this.disabled = false;
-        if (!res.ok) { alert('เกิดข้อผิดพลาด: ' + (res.error||'')); return; }
+        if (error) { alert('เกิดข้อผิดพลาด: ' + error.message); return; }
         emp.active = newActive;
         renderEmployeeList();
         populateEmployeeSelect();
-      }).catch(err => { this.disabled=false; alert('เชื่อมต่อไม่ได้: '+err); });
+      }).catch(err => { this.disabled=false; alert('เชื่อมต่อไม่ได้: '+(err.message||err)); });
     });
 
     row.querySelector('.save-emp-btn').addEventListener('click', function() {
@@ -1245,14 +1246,17 @@ function renderEmployeeList() {
       const newName = row.querySelector('.edit-emp-name').value.trim();
       if (!newCode || !newName) { alert('กรุณากรอกรหัสและชื่อพนักงาน'); return; }
       this.disabled = true; this.textContent = 'กำลังบันทึก...';
-      apiPost({ action:'updateEmployee', id: emp.id, emp_code: newCode, emp_name: newName }).then(res => {
+      withRetry(() => getSbClient().from('employees').update({ emp_code: newCode, emp_name: newName }).eq('id', emp.id).select().single()).then(({ data, error }) => {
         this.disabled = false; this.textContent = 'บันทึก';
-        if (!res.ok) { alert('เกิดข้อผิดพลาด: ' + (res.error||'')); return; }
+        if (error) {
+          alert(error.code === '23505' ? 'มีรหัสพนักงานนี้อยู่แล้ว' : ('เกิดข้อผิดพลาด: ' + error.message));
+          return;
+        }
         emp.emp_code = newCode; emp.emp_name = newName;
         form.classList.remove('open');
         renderEmployeeList();
         populateEmployeeSelect();
-      }).catch(err => { this.disabled=false; this.textContent='บันทึก'; alert('เชื่อมต่อไม่ได้: '+err); });
+      }).catch(err => { this.disabled=false; this.textContent='บันทึก'; alert('เชื่อมต่อไม่ได้: '+(err.message||err)); });
     });
   });
 }
@@ -1264,14 +1268,17 @@ document.getElementById('addEmpBtn').addEventListener('click', function() {
   const name = nameInput.value.trim();
   if (!code || !name) { alert('กรุณากรอกรหัสและชื่อพนักงาน'); return; }
   this.disabled = true; this.textContent = 'กำลังเพิ่ม...';
-  apiPost({ action:'addEmployee', emp_code: code, emp_name: name }).then(res => {
+  withRetry(() => getSbClient().from('employees').insert([{ emp_code: code, emp_name: name, active: true }]).select().single()).then(({ data, error }) => {
     this.disabled = false; this.textContent = '+ เพิ่มพนักงาน';
-    if (!res.ok) { alert('เกิดข้อผิดพลาด: ' + (res.error||'')); return; }
-    employees.push({ id: res.id, emp_code: code, emp_name: name, active: true });
+    if (error) {
+      alert(error.code === '23505' ? 'มีรหัสพนักงานนี้อยู่แล้ว' : ('เกิดข้อผิดพลาด: ' + error.message));
+      return;
+    }
+    employees.push(data);
     codeInput.value = ''; nameInput.value = '';
     renderEmployeeList();
     populateEmployeeSelect();
-  }).catch(err => { this.disabled=false; this.textContent='+ เพิ่มพนักงาน'; alert('เชื่อมต่อไม่ได้: '+err); });
+  }).catch(err => { this.disabled=false; this.textContent='+ เพิ่มพนักงาน'; alert('เชื่อมต่อไม่ได้: '+(err.message||err)); });
 });
 
 /* ================= การนำทาง (bottom nav) ================= */
@@ -1288,21 +1295,29 @@ document.querySelectorAll('.navbtn').forEach(btn => {
 /* ================= Settings modal ================= */
 const settingsModal = document.getElementById('settingsModal');
 document.getElementById('settingsBtn').addEventListener('click', () => {
-  document.getElementById('urlInput').value = APPS_SCRIPT_URL === DEFAULT_APPS_SCRIPT_URL ? '' : APPS_SCRIPT_URL;
+  document.getElementById('urlInput').value = SUPABASE_URL === DEFAULT_SUPABASE_URL ? '' : SUPABASE_URL;
+  document.getElementById('keyInput').value = SUPABASE_ANON_KEY === DEFAULT_SUPABASE_ANON_KEY ? '' : SUPABASE_ANON_KEY;
   settingsModal.classList.add('show');
 });
 document.getElementById('cancelSettings').addEventListener('click', () => settingsModal.classList.remove('show'));
 document.getElementById('resetDefaultSettings').addEventListener('click', () => {
-  localStorage.removeItem('apps_script_url');
-  APPS_SCRIPT_URL = DEFAULT_APPS_SCRIPT_URL;
+  localStorage.removeItem('supabase_url');
+  localStorage.removeItem('supabase_anon_key');
+  SUPABASE_URL = DEFAULT_SUPABASE_URL;
+  SUPABASE_ANON_KEY = DEFAULT_SUPABASE_ANON_KEY;
+  resetSbClient();
   settingsModal.classList.remove('show');
   init();
 });
 document.getElementById('saveSettings').addEventListener('click', () => {
-  const v = document.getElementById('urlInput').value.trim();
-  if (!v) return;
-  APPS_SCRIPT_URL = v;
-  localStorage.setItem('apps_script_url', v);
+  const u = document.getElementById('urlInput').value.trim();
+  const k = document.getElementById('keyInput').value.trim();
+  if (!u || !k) { alert('กรุณากรอกทั้ง URL และ anon key'); return; }
+  SUPABASE_URL = u;
+  SUPABASE_ANON_KEY = k;
+  localStorage.setItem('supabase_url', u);
+  localStorage.setItem('supabase_anon_key', k);
+  resetSbClient();
   settingsModal.classList.remove('show');
   init();
 });
@@ -1312,19 +1327,14 @@ function init() {
   if (!checkConfigured()) return;
   setSyncStatus(true, 'กำลังโหลดข้อมูล...');
   document.getElementById('retryConnectBtn').style.display = 'none';
-  // โหลดทีละอย่าง (ไม่ใช่พร้อมกัน) โดยตั้งใจ — ตอนเปิดแอปทุกครั้งเดิมยิง 3 คำขอพร้อมกัน (compressors/readings/employees)
-  // ถ้าหลายคนเปิดแอปใกล้ๆ กัน จะกลายเป็นคำขอพร้อมกันจำนวนมากชนโควต้าการทำงานพร้อมกันของ Apps Script
-  // โหลดทีละอย่างช้ากว่าเล็กน้อยต่อคน แต่ลดจำนวนคำขอพร้อมกันของทั้งระบบลง 3 เท่า ลดโอกาสเชื่อมต่อไม่ได้ตอนเปิดแอปได้มาก
-  loadCompressors()
-    .then(() => loadEmployees())
-    .then(() => loadReadings({}))
-    .then(() => {
-      setSyncStatus(true, '✅ เชื่อมต่อสำเร็จ');
-    })
-    .catch(err => {
-      setSyncStatus(false, '⚠ เชื่อมต่อไม่ได้: ' + err.message);
-      document.getElementById('retryConnectBtn').style.display = 'inline';
-    });
+  // Supabase เป็นบริการที่ทำงานตลอดเวลา ไม่มีข้อจำกัดเรื่องคำขอพร้อมกันแบบ Apps Script
+  // จึงโหลดทั้ง 3 อย่างพร้อมกันได้เต็มที่ เร็วที่สุด ไม่ต้องกังวลเรื่องคนใช้งานพร้อมกันหลายคน
+  Promise.all([loadCompressors(), loadEmployees(), loadReadings({})]).then(() => {
+    setSyncStatus(true, '✅ เชื่อมต่อสำเร็จ');
+  }).catch(err => {
+    setSyncStatus(false, '⚠ เชื่อมต่อไม่ได้: ' + (err.message || err));
+    document.getElementById('retryConnectBtn').style.display = 'inline';
+  });
 }
 document.getElementById('retryConnectBtn').addEventListener('click', init);
 init();
