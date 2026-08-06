@@ -209,6 +209,7 @@
       <div>
         <h1>🌀 บันทึกค่า Compressor</h1>
         <div class="sub" id="syncStatus">กำลังเชื่อมต่อ...</div>
+        <button class="sub" id="retryConnectBtn" style="display:none; background:none; border:none; color:#FFFFFF; text-decoration:underline; padding:0; cursor:pointer; font-size:12px;">🔄 ลองเชื่อมต่อใหม่</button>
       </div>
       <button class="icon-btn" id="settingsBtn">⚙</button>
     </div>
@@ -383,7 +384,7 @@ let selectedEmployee = null;
 // Google Apps Script บางครั้งตอบกลับเป็นหน้า HTML (เช่น timeout หรือระบบสะดุดชั่วคราว) แทนที่จะเป็น JSON
 // โดยเฉพาะเมื่อมีคนใช้งานพร้อมกันหลายคน — ฟังก์ชันนี้จะลองใหม่อัตโนมัติก่อนแจ้ง error ให้ผู้ใช้เห็น
 function fetchJsonWithRetry(url, options, attemptsLeft) {
-  if (attemptsLeft === undefined) attemptsLeft = 2; // ลองรวมทั้งหมด 3 ครั้ง (ครั้งแรก + retry 2 ครั้ง)
+  if (attemptsLeft === undefined) attemptsLeft = 4; // ลองรวมทั้งหมด 5 ครั้ง (ครั้งแรก + retry 4 ครั้ง) ให้เวลาเซิร์ฟเวอร์ฟื้นตัวมากขึ้น
   return fetch(url, options)
     .then(r => r.text())
     .then(text => {
@@ -391,7 +392,7 @@ function fetchJsonWithRetry(url, options, attemptsLeft) {
         return JSON.parse(text);
       } catch (e) {
         if (attemptsLeft > 0) {
-          return new Promise(resolve => setTimeout(resolve, 1000)).then(() => fetchJsonWithRetry(url, options, attemptsLeft - 1));
+          return new Promise(resolve => setTimeout(resolve, 1200)).then(() => fetchJsonWithRetry(url, options, attemptsLeft - 1));
         }
         throw new Error('เซิร์ฟเวอร์ตอบกลับไม่ถูกต้องชั่วคราว (อาจมีผู้ใช้งานพร้อมกันหลายคน) กรุณาลองใหม่อีกครั้ง');
       }
@@ -399,7 +400,7 @@ function fetchJsonWithRetry(url, options, attemptsLeft) {
     .catch(err => {
       if (err instanceof TypeError && attemptsLeft > 0) {
         // เช่น เชื่อมต่อเน็ตหลุดชั่วขณะ — ลองใหม่เช่นกัน
-        return new Promise(resolve => setTimeout(resolve, 1000)).then(() => fetchJsonWithRetry(url, options, attemptsLeft - 1));
+        return new Promise(resolve => setTimeout(resolve, 1200)).then(() => fetchJsonWithRetry(url, options, attemptsLeft - 1));
       }
       throw err;
     });
@@ -718,6 +719,25 @@ function renderParamFields() {
 
 let isSubmittingReading = false;
 
+function handleReadingSaveSuccess(res, recovered) {
+  const box = document.getElementById('logSuccess');
+  const prefix = recovered ? '✅ บันทึกสำเร็จแล้ว (ระบบตรวจสอบย้อนหลังให้ เนื่องจากตอบกลับช้าไปครั้งแรก)' : null;
+  if (res.is_abnormal) {
+    box.innerHTML = '<div class="success-banner abn">⚠ ' + (prefix || 'บันทึกสำเร็จ') + ' — พบค่าผิดปกติ!' +
+      (res.abnormal_params && res.abnormal_params.length ? ('<ul>' + res.abnormal_params.map(a=>'<li>'+escapeHtml(a)+'</li>').join('') + '</ul>') : '') +
+      '</div>';
+  } else {
+    box.innerHTML = '<div class="success-banner">' + (prefix || '✅ บันทึกสำเร็จ') + (prefix ? '' : ' — ค่าทั้งหมดอยู่ในเกณฑ์ปกติ') + '</div>';
+  }
+  document.querySelectorAll('#paramFields input').forEach(i => { i.value=''; i.classList.remove('warn'); });
+  document.getElementById('noteField').value = '';
+  document.getElementById('compSelect').value = '';
+  selectedCompressor = null;
+  renderCompInfo(); renderParamFields();
+  loadReadings();
+  setTimeout(() => { box.innerHTML=''; }, 7000);
+}
+
 document.getElementById('submitBtn').addEventListener('click', function() {
   if (isSubmittingReading) return; // กันกดซ้ำระหว่างกำลังบันทึกอยู่
   if (!selectedEmployee) { alert('กรุณาเลือกชื่อพนักงาน'); return; }
@@ -734,31 +754,36 @@ document.getElementById('submitBtn').addEventListener('click', function() {
   reading.note = document.getElementById('noteField').value.trim();
   // รหัสอ้างอิงเฉพาะของการส่งครั้งนี้ — คงที่แม้ระบบจะลองส่งซ้ำอัตโนมัติ (retry) เบื้องหลัง
   // เพื่อให้ฝั่งเซิร์ฟเวอร์รู้ว่าเป็นการส่งครั้งเดียวกัน ไม่สร้างแถวซ้ำ
-  reading.client_request_id = 'req_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+  const clientRequestId = 'req_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+  reading.client_request_id = clientRequestId;
 
   const btn = this;
   isSubmittingReading = true;
   btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+
   apiPost({ action:'createReading', reading: reading }).then(res => {
     isSubmittingReading = false;
     btn.disabled = false; btn.textContent = 'บันทึกข้อมูล';
     if (!res.ok) { alert('เกิดข้อผิดพลาด: ' + (res.error||'')); return; }
-    const box = document.getElementById('logSuccess');
-    if (res.is_abnormal) {
-      box.innerHTML = '<div class="success-banner abn">⚠ บันทึกสำเร็จ — พบค่าผิดปกติ!' +
-        (res.abnormal_params && res.abnormal_params.length ? ('<ul>' + res.abnormal_params.map(a=>'<li>'+escapeHtml(a)+'</li>').join('') + '</ul>') : '') +
-        '</div>';
-    } else {
-      box.innerHTML = '<div class="success-banner">✅ บันทึกสำเร็จ — ค่าทั้งหมดอยู่ในเกณฑ์ปกติ</div>';
-    }
-    document.querySelectorAll('#paramFields input').forEach(i => { i.value=''; i.classList.remove('warn'); });
-    document.getElementById('noteField').value = '';
-    document.getElementById('compSelect').value = '';
-    selectedCompressor = null;
-    renderCompInfo(); renderParamFields();
-    loadReadings();
-    setTimeout(() => { box.innerHTML=''; }, 6000);
-  }).catch(err => { isSubmittingReading=false; btn.disabled=false; btn.textContent='บันทึกข้อมูล'; alert('เชื่อมต่อไม่ได้: '+err); });
+    handleReadingSaveSuccess(res, false);
+  }).catch(err => {
+    // ลองถามเซิร์ฟเวอร์อีกครั้งว่าจริงๆ แล้วบันทึกสำเร็จไปแล้วหรือยัง (เผื่อ retry ก่อนหน้าสำเร็จแต่คำตอบมาไม่ถึง)
+    // ป้องกันทั้งการแจ้ง error หลอกๆ ทั้งที่บันทึกแล้ว และป้องกันการกดซ้ำจนเกิดข้อมูลซ้ำ
+    btn.textContent = 'กำลังตรวจสอบ...';
+    apiPost({ action:'checkSubmitStatus', client_request_id: clientRequestId }).then(checkRes => {
+      isSubmittingReading = false;
+      btn.disabled = false; btn.textContent = 'บันทึกข้อมูล';
+      if (checkRes && checkRes.ok && checkRes.found && checkRes.result) {
+        handleReadingSaveSuccess(checkRes.result, true);
+      } else {
+        alert('เชื่อมต่อไม่ได้: ' + err + '\n\nระบบยืนยันแล้วว่ายังไม่ได้บันทึกข้อมูลนี้ กรุณากดบันทึกใหม่อีกครั้งได้เลย ไม่ซ้ำแน่นอน');
+      }
+    }).catch(() => {
+      isSubmittingReading = false;
+      btn.disabled = false; btn.textContent = 'บันทึกข้อมูล';
+      alert('เชื่อมต่อไม่ได้: ' + err + '\n\nกรุณาตรวจสอบหน้า "ประวัติ" ก่อนกดบันทึกซ้ำ เพื่อความชัวร์ว่ายังไม่ได้บันทึกไปแล้ว');
+    });
+  });
 });
 
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -1286,12 +1311,22 @@ document.getElementById('saveSettings').addEventListener('click', () => {
 function init() {
   if (!checkConfigured()) return;
   setSyncStatus(true, 'กำลังโหลดข้อมูล...');
-  Promise.all([loadCompressors(), loadReadings({}), loadEmployees()]).then(() => {
-    setSyncStatus(true, '✅ เชื่อมต่อสำเร็จ');
-  }).catch(err => {
-    setSyncStatus(false, '⚠ เชื่อมต่อไม่ได้: ' + err.message);
-  });
+  document.getElementById('retryConnectBtn').style.display = 'none';
+  // โหลดทีละอย่าง (ไม่ใช่พร้อมกัน) โดยตั้งใจ — ตอนเปิดแอปทุกครั้งเดิมยิง 3 คำขอพร้อมกัน (compressors/readings/employees)
+  // ถ้าหลายคนเปิดแอปใกล้ๆ กัน จะกลายเป็นคำขอพร้อมกันจำนวนมากชนโควต้าการทำงานพร้อมกันของ Apps Script
+  // โหลดทีละอย่างช้ากว่าเล็กน้อยต่อคน แต่ลดจำนวนคำขอพร้อมกันของทั้งระบบลง 3 เท่า ลดโอกาสเชื่อมต่อไม่ได้ตอนเปิดแอปได้มาก
+  loadCompressors()
+    .then(() => loadEmployees())
+    .then(() => loadReadings({}))
+    .then(() => {
+      setSyncStatus(true, '✅ เชื่อมต่อสำเร็จ');
+    })
+    .catch(err => {
+      setSyncStatus(false, '⚠ เชื่อมต่อไม่ได้: ' + err.message);
+      document.getElementById('retryConnectBtn').style.display = 'inline';
+    });
 }
+document.getElementById('retryConnectBtn').addEventListener('click', init);
 init();
 
 // รีเฟรชค่ามาตรฐานเครื่อง Compressor เงียบๆ ทุก 5 นาที เผื่อแอดมินแก้ไขค่ามาตรฐานระหว่างที่หน้าเว็บเปิดค้างไว้นาน
