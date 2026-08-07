@@ -1447,20 +1447,28 @@ function renderSheetEditor() {
     body += '<tr data-id="' + c.id + '">' +
       '<td class="sheet-col-cb"><input type="checkbox" class="sheet-target-cb" value="' + c.id + '"></td>' +
       '<td class="sheet-col-name"><button type="button" class="sheet-copy-btn" data-id="' + c.id + '" title="ใช้แถวนี้เป็นต้นทาง">📋</button>' + escapeHtml(c.no_label) + '</td>' +
-      '<td><input type="text" class="sheet-input wide" data-key="zone" value="' + escapeHtml(c.zone||'') + '"></td>' +
-      '<td><select class="sheet-input" data-key="sight_glass_count">' +
+      '<td><input type="text" class="sheet-input wide" data-key="zone" data-original="' + escapeHtml(c.zone||'') + '" value="' + escapeHtml(c.zone||'') + '"></td>' +
+      '<td><select class="sheet-input" data-key="sight_glass_count" data-original="' + gc + '">' +
         '<option value="1"' + (gc===1?' selected':'') + '>1</option>' +
         '<option value="2"' + (gc===2?' selected':'') + '>2</option>' +
       '</select></td>';
     BULK_MINMAX_FIELDS.forEach(([label, minKey, maxKey]) => {
       const minV = c[minKey], maxV = c[maxKey];
-      body += '<td><input type="number" step="0.01" class="sheet-input" data-key="' + minKey + '" value="' + (minV!==null&&minV!==undefined?minV:'') + '"></td>' +
-              '<td><input type="number" step="0.01" class="sheet-input" data-key="' + maxKey + '" value="' + (maxV!==null&&maxV!==undefined?maxV:'') + '"></td>';
+      const minVal = (minV!==null&&minV!==undefined) ? minV : '';
+      const maxVal = (maxV!==null&&maxV!==undefined) ? maxV : '';
+      body += '<td><input type="number" step="0.01" class="sheet-input" data-key="' + minKey + '" data-original="' + minVal + '" value="' + minVal + '"></td>' +
+              '<td><input type="number" step="0.01" class="sheet-input" data-key="' + maxKey + '" data-original="' + maxVal + '" value="' + maxVal + '"></td>';
     });
     body += '</tr>';
   });
 
   table.innerHTML = '<thead>' + headRow1 + headRow2 + '</thead><tbody>' + body + '</tbody>';
+
+  // ติดตามว่าช่องไหนถูกแก้จริง (เทียบกับค่าดั้งเดิมที่โหลดมา) เพื่อให้บันทึกเฉพาะแถวที่แก้จริงเท่านั้น
+  table.querySelectorAll('.sheet-input').forEach(inp => {
+    inp.addEventListener('input', () => markSheetDirty(inp));
+    inp.addEventListener('change', () => markSheetDirty(inp));
+  });
 
   table.querySelectorAll('.sheet-copy-btn').forEach(btn => {
     btn.addEventListener('click', function() {
@@ -1472,6 +1480,10 @@ function renderSheetEditor() {
       document.getElementById('sheetPasteBtn').disabled = false;
     });
   });
+}
+
+function markSheetDirty(inp) {
+  inp.classList.toggle('sheet-dirty', inp.value !== inp.dataset.original);
 }
 
 document.getElementById('sheetPasteBtn').addEventListener('click', () => {
@@ -1489,7 +1501,7 @@ document.getElementById('sheetPasteBtn').addEventListener('click', () => {
     row.querySelectorAll('.sheet-input').forEach(inp => {
       if (sourceValues.hasOwnProperty(inp.dataset.key)) {
         inp.value = sourceValues[inp.dataset.key];
-        inp.classList.add('sheet-dirty');
+        markSheetDirty(inp);
       }
     });
   });
@@ -1499,7 +1511,11 @@ document.getElementById('sheetPasteBtn').addEventListener('click', () => {
 document.getElementById('sheetSaveAllBtn').addEventListener('click', function() {
   const table = document.getElementById('sheetTable');
   const rows = Array.from(table.querySelectorAll('tbody tr'));
-  const updates = rows.map(row => {
+  const dirtyRows = rows.filter(row => row.querySelector('.sheet-input.sheet-dirty'));
+
+  if (!dirtyRows.length) { alert('ยังไม่มีการแก้ไขค่าใดๆ'); return; }
+
+  const updates = dirtyRows.map(row => {
     const obj = { id: Number(row.dataset.id) };
     row.querySelectorAll('.sheet-input').forEach(inp => {
       const key = inp.dataset.key;
@@ -1510,7 +1526,12 @@ document.getElementById('sheetSaveAllBtn').addEventListener('click', function() 
     return obj;
   });
 
-  if (!confirm('บันทึกค่ามาตรฐานทั้งหมด ' + updates.length + ' เครื่อง?')) return;
+  const names = dirtyRows.map(row => {
+    const c = compressorsById[row.dataset.id];
+    return c ? c.no_label : row.dataset.id;
+  });
+  const preview = names.slice(0, 5).join(', ') + (names.length > 5 ? ' และอีก ' + (names.length - 5) + ' เครื่อง' : '');
+  if (!confirm('บันทึกค่าที่แก้ไขสำหรับ ' + updates.length + ' เครื่อง: ' + preview + ' ?')) return;
 
   const btn = this;
   const originalText = btn.textContent;
@@ -1523,7 +1544,7 @@ document.getElementById('sheetSaveAllBtn').addEventListener('click', function() 
       if (idx !== -1) compressors[idx] = row;
       compressorsById[row.id] = row;
     });
-    table.querySelectorAll('.sheet-input.sheet-dirty').forEach(inp => inp.classList.remove('sheet-dirty'));
+    table.querySelectorAll('.sheet-input.sheet-dirty').forEach(inp => { inp.dataset.original = inp.value; inp.classList.remove('sheet-dirty'); });
     alert('บันทึกสำเร็จทั้งหมด ' + updates.length + ' เครื่อง');
   }).catch(err => { btn.disabled = false; btn.textContent = originalText; alert('เชื่อมต่อไม่ได้: ' + (err.message||err)); });
 });
