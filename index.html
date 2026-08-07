@@ -1687,13 +1687,25 @@ function renderRoundsTab() {
  * แสดงสรุปทั้ง 3 กะของวันนี้ (ตรงเวลา/ล่าช้า/ไม่ได้จด) + รายชื่อเครื่องที่ "ล่าช้า" อยู่ตอนนี้
  * เพื่อให้ช่างเห็นและรีบไปจดก่อนที่จะพ้นเวลาแล้วกลายเป็น "ไม่ได้จดเครื่อง"
  */
+// กะ C (00:00-08:00) กำกวมได้ว่า "วันนี้" หมายถึงเช้ามืดที่ผ่านมาแล้ว หรือคืนนี้ที่กำลังจะมาถึง
+// ถ้ายังไม่ถึง 8 โมงเช้า ให้ถือว่ากะ C ของวันนี้คือช่วงเช้ามืดที่กำลังดำเนินอยู่/เพิ่งผ่าน (ใช้วันที่วันนี้)
+// ถ้าเลย 8 โมงเช้าไปแล้ว (เข้ากะ A/B แล้ว) ให้ถือว่า "กะ C ของวันนี้" หมายถึงคืนนี้/พรุ่งนี้เช้ามืดแทน (วันถัดไป)
+function getShiftDateAnchor(shift, now) {
+  const pad = n => String(n).padStart(2, '0');
+  if (shift === 'C' && now.getHours() >= 8) {
+    const d = new Date(now); d.setDate(d.getDate() + 1);
+    return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+  }
+  return todayDateStr();
+}
+
 function renderTechStatusBar() {
   const now = new Date();
   const dateStr = todayDateStr();
   const currentShift = getCurrentShiftGuess(now);
 
   const rangeStart = new Date(dateStr + 'T00:00:00'); rangeStart.setHours(-1, 0, 0, 0);
-  const rangeEnd = new Date(dateStr + 'T00:00:00'); rangeEnd.setDate(rangeEnd.getDate() + 2);
+  const rangeEnd = new Date(dateStr + 'T00:00:00'); rangeEnd.setDate(rangeEnd.getDate() + 3); // ขยายช่วงเผื่อกะ C อ้างอิงวันถัดไป
 
   withRetry(() => getSbClient().from('readings').select('id,compressor_id,timestamp')
     .gte('timestamp', rangeStart.toISOString()).lt('timestamp', rangeEnd.toISOString())
@@ -1705,7 +1717,8 @@ function renderTechStatusBar() {
     const lateItems = [];
 
     ['A', 'B', 'C'].forEach(shift => {
-      const roundDateTimes = getShiftRoundDateTimes(dateStr, shift);
+      const anchorDate = getShiftDateAnchor(shift, now);
+      const roundDateTimes = getShiftRoundDateTimes(anchorDate, shift);
       const roundHours = ROUND_HOURS_BY_SHIFT[shift] || [];
       let ontime = 0, late = 0, missed = 0;
       compressors.forEach(c => {
