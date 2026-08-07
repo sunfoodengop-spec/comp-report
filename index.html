@@ -161,6 +161,25 @@
   }
   .bulk-field-row.disabled { opacity:0.45; }
   .bulk-field-row.disabled input:not([type="checkbox"]), .bulk-field-row.disabled select { pointer-events:none; }
+
+  /* spreadsheet-style standards table */
+  .sheet-scroll-wrap { overflow:auto; max-height:70vh; border:1px solid var(--border); border-radius:10px; background:var(--panel); }
+  #sheetTable { border-collapse:collapse; font-size:11px; white-space:nowrap; }
+  #sheetTable th, #sheetTable td { border:1px solid var(--border); padding:4px 5px; text-align:center; }
+  #sheetTable thead th { background:var(--dark-soft); color:var(--text); font-weight:700; position:sticky; top:0; z-index:2; }
+  #sheetTable thead tr:first-child th { top:0; }
+  #sheetTable thead tr:nth-child(2) th { top:29px; font-weight:600; color:var(--muted); font-size:10px; }
+  .sheet-col-name { position:sticky; left:0; z-index:3; background:var(--panel); text-align:left; min-width:150px; }
+  #sheetTable thead .sheet-col-name { z-index:4; background:var(--dark-soft); }
+  .sheet-col-cb { position:sticky; left:0; z-index:3; background:var(--panel); }
+  #sheetTable thead .sheet-col-cb { z-index:4; background:var(--dark-soft); }
+  /* เมื่อมีทั้งคอลัมน์ checkbox และชื่อเครื่อง ให้คอลัมน์ชื่อเลื่อนขวาไปตามความกว้างคอลัมน์แรก */
+  .sheet-col-name { left:34px; }
+  .sheet-input { width:46px; padding:3px 2px; border-radius:5px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:11px; text-align:center; }
+  .sheet-input.wide { width:80px; text-align:left; }
+  .sheet-copy-btn { background:none; border:none; cursor:pointer; font-size:13px; padding:0 4px 0 0; vertical-align:middle; }
+  tr.sheet-source-row td { background:var(--accent-soft) !important; }
+  .sheet-input.sheet-dirty { border-color:var(--accent); background:var(--accent-soft); }
   .emp-row-top { display:flex; justify-content:space-between; align-items:center; gap:8px; }
   .emp-row-name { font-weight:700; font-size:14px; }
   .emp-row-code { color:var(--muted); font-size:12px; margin-top:2px; }
@@ -302,6 +321,7 @@
         <div class="subtab" data-sub="all-abn">ความผิดปกติทั้งหมด</div>
         <div class="subtab" data-sub="std">ตั้งค่ามาตรฐาน</div>
         <div class="subtab" data-sub="bulk">ตั้งค่าหลายเครื่อง</div>
+        <div class="subtab" data-sub="sheet">ตารางค่ามาตรฐาน</div>
         <div class="subtab" data-sub="emp">จัดการพนักงาน</div>
       </div>
 
@@ -355,6 +375,20 @@
           <div id="bulkFieldsWrap"></div>
           <button class="save-std-btn" id="bulkApplyBtn">✅ ใช้ค่านี้กับเครื่องที่เลือก</button>
         </div>
+      </div>
+
+      <div class="subview" id="sub-sheet">
+        <div style="font-size:11.5px; color:var(--muted); margin-bottom:12px; line-height:1.6;">
+          แก้ค่าตรงในตารางได้เลย (เหมือน Excel/Google Sheets) — กด 📋 ที่แถวต้นทาง แล้วติ๊กแถวปลายทางในคอลัมน์ซ้ายสุด แล้วกด "วางค่า" เพื่อคัดลอกทั้งแถว การเปลี่ยนแปลงจะยังไม่บันทึกจนกว่าจะกด "บันทึกทั้งหมด" ด้านล่าง
+        </div>
+        <div style="display:flex; gap:8px; margin-bottom:10px; align-items:center;">
+          <div id="sheetCopySourceLabel" style="flex:1; font-size:12.5px; color:var(--muted);">ยังไม่ได้เลือกแถวต้นทาง</div>
+          <button class="emp-btn" id="sheetPasteBtn" disabled>📥 วางค่า</button>
+        </div>
+        <div class="sheet-scroll-wrap">
+          <table id="sheetTable"></table>
+        </div>
+        <button class="save-std-btn" id="sheetSaveAllBtn" style="margin-top:14px;">💾 บันทึกทั้งหมด</button>
       </div>
 
       <div class="subview" id="sub-emp">
@@ -1087,6 +1121,7 @@ document.querySelectorAll('.subtab').forEach(tab => {
     if (this.dataset.sub === 'all-abn') renderAllAbnormal();
     if (this.dataset.sub === 'emp') renderEmployeeList();
     if (this.dataset.sub === 'bulk') renderBulkEditor();
+    if (this.dataset.sub === 'sheet') renderSheetEditor();
   });
 });
 
@@ -1306,6 +1341,110 @@ document.getElementById('bulkApplyBtn').addEventListener('click', function() {
     });
     alert('ตั้งค่าเรียบร้อย ' + selectedIds.length + ' เครื่อง');
     renderBulkCompList();
+  }).catch(err => { btn.disabled = false; btn.textContent = originalText; alert('เชื่อมต่อไม่ได้: ' + (err.message||err)); });
+});
+
+/* ================= ตารางค่ามาตรฐานแบบ Spreadsheet (แก้ตรงในตาราง + คัดลอกทั้งแถวไปเครื่องอื่น) ================= */
+let sheetCopySourceId = null;
+
+function renderSheetEditor() {
+  sheetCopySourceId = null;
+  document.getElementById('sheetCopySourceLabel').textContent = 'ยังไม่ได้เลือกแถวต้นทาง';
+  document.getElementById('sheetPasteBtn').disabled = true;
+
+  const table = document.getElementById('sheetTable');
+
+  let headRow1 = '<tr><th class="sheet-col-cb" rowspan="2"></th><th class="sheet-col-name" rowspan="2">เครื่อง</th>' +
+    '<th rowspan="2">โซน</th><th rowspan="2">ตาน้ำมัน</th>';
+  let headRow2 = '<tr>';
+  BULK_MINMAX_FIELDS.forEach(([label]) => { headRow1 += '<th colspan="2">' + label + '</th>'; headRow2 += '<th>min</th><th>max</th>'; });
+  headRow1 += '</tr>';
+  headRow2 += '</tr>';
+
+  let body = '';
+  compressors.forEach(c => {
+    const gc = getSightGlassCount(c);
+    body += '<tr data-id="' + c.id + '">' +
+      '<td class="sheet-col-cb"><input type="checkbox" class="sheet-target-cb" value="' + c.id + '"></td>' +
+      '<td class="sheet-col-name"><button type="button" class="sheet-copy-btn" data-id="' + c.id + '" title="ใช้แถวนี้เป็นต้นทาง">📋</button>' + escapeHtml(c.no_label) + '</td>' +
+      '<td><input type="text" class="sheet-input wide" data-key="zone" value="' + escapeHtml(c.zone||'') + '"></td>' +
+      '<td><select class="sheet-input" data-key="sight_glass_count">' +
+        '<option value="1"' + (gc===1?' selected':'') + '>1</option>' +
+        '<option value="2"' + (gc===2?' selected':'') + '>2</option>' +
+      '</select></td>';
+    BULK_MINMAX_FIELDS.forEach(([label, minKey, maxKey]) => {
+      const minV = c[minKey], maxV = c[maxKey];
+      body += '<td><input type="number" step="0.01" class="sheet-input" data-key="' + minKey + '" value="' + (minV!==null&&minV!==undefined?minV:'') + '"></td>' +
+              '<td><input type="number" step="0.01" class="sheet-input" data-key="' + maxKey + '" value="' + (maxV!==null&&maxV!==undefined?maxV:'') + '"></td>';
+    });
+    body += '</tr>';
+  });
+
+  table.innerHTML = '<thead>' + headRow1 + headRow2 + '</thead><tbody>' + body + '</tbody>';
+
+  table.querySelectorAll('.sheet-copy-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      sheetCopySourceId = this.dataset.id;
+      table.querySelectorAll('tbody tr').forEach(tr => tr.classList.remove('sheet-source-row'));
+      this.closest('tr').classList.add('sheet-source-row');
+      const comp = compressorsById[sheetCopySourceId];
+      document.getElementById('sheetCopySourceLabel').textContent = '📋 ต้นทาง: ' + (comp ? comp.no_label : '');
+      document.getElementById('sheetPasteBtn').disabled = false;
+    });
+  });
+}
+
+document.getElementById('sheetPasteBtn').addEventListener('click', () => {
+  if (!sheetCopySourceId) return;
+  const table = document.getElementById('sheetTable');
+  const sourceRow = table.querySelector('tr[data-id="' + sheetCopySourceId + '"]');
+  const targetIds = Array.from(table.querySelectorAll('.sheet-target-cb:checked')).map(cb => cb.value).filter(id => id !== sheetCopySourceId);
+  if (!targetIds.length) { alert('กรุณาติ๊กเลือกแถวปลายทาง (คอลัมน์ซ้ายสุด) อย่างน้อย 1 แถว'); return; }
+
+  const sourceValues = {};
+  sourceRow.querySelectorAll('.sheet-input').forEach(inp => { sourceValues[inp.dataset.key] = inp.value; });
+
+  targetIds.forEach(id => {
+    const row = table.querySelector('tr[data-id="' + id + '"]');
+    row.querySelectorAll('.sheet-input').forEach(inp => {
+      if (sourceValues.hasOwnProperty(inp.dataset.key)) {
+        inp.value = sourceValues[inp.dataset.key];
+        inp.classList.add('sheet-dirty');
+      }
+    });
+  });
+  alert('คัดลอกค่าไป ' + targetIds.length + ' แถวแล้ว (ยังไม่บันทึกจริง กด "บันทึกทั้งหมด" ด้านล่างเพื่อยืนยัน)');
+});
+
+document.getElementById('sheetSaveAllBtn').addEventListener('click', function() {
+  const table = document.getElementById('sheetTable');
+  const rows = Array.from(table.querySelectorAll('tbody tr'));
+  const updates = rows.map(row => {
+    const obj = { id: Number(row.dataset.id) };
+    row.querySelectorAll('.sheet-input').forEach(inp => {
+      const key = inp.dataset.key;
+      if (key === 'zone') obj[key] = inp.value;
+      else if (key === 'sight_glass_count') obj[key] = Number(inp.value);
+      else obj[key] = inp.value === '' ? null : Number(inp.value);
+    });
+    return obj;
+  });
+
+  if (!confirm('บันทึกค่ามาตรฐานทั้งหมด ' + updates.length + ' เครื่อง?')) return;
+
+  const btn = this;
+  const originalText = btn.textContent;
+  btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+  withRetry(() => getSbClient().from('compressors').upsert(updates).select()).then(({ data, error }) => {
+    btn.disabled = false; btn.textContent = originalText;
+    if (error) { alert('เกิดข้อผิดพลาด: ' + error.message); return; }
+    (data || []).forEach(row => {
+      const idx = compressors.findIndex(c => c.id === row.id);
+      if (idx !== -1) compressors[idx] = row;
+      compressorsById[row.id] = row;
+    });
+    table.querySelectorAll('.sheet-input.sheet-dirty').forEach(inp => inp.classList.remove('sheet-dirty'));
+    alert('บันทึกสำเร็จทั้งหมด ' + updates.length + ' เครื่อง');
   }).catch(err => { btn.disabled = false; btn.textContent = originalText; alert('เชื่อมต่อไม่ได้: ' + (err.message||err)); });
 });
 
