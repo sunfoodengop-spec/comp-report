@@ -394,9 +394,11 @@ let selectedEmployee = null;
 
 // Supabase เป็นบริการที่ทำงานตลอดเวลา (ไม่มี cold start เหมือน Apps Script) จึงไม่ค่อยล้มเหลวแบบสุ่ม
 // แต่ยังคง retry เบาๆ ไว้เผื่อเน็ตของผู้ใช้หลุดชั่วขณะ (ความล้มเหลวระดับเครือข่ายเท่านั้น ไม่ retry error จากตัวคำสั่งเอง)
+// ใช้ Promise.resolve().then(fn) แทนการเรียก fn() ตรงๆ เพื่อดักจับกรณี fn throw แบบ synchronous ด้วย
+// (เช่น ไลบรารี Supabase โหลดไม่สำเร็จ) ไม่งั้นจะหลุดออกจากสาย .catch() ทำให้ค้างที่ "กำลังเชื่อมต่อ..." ตลอดไปโดยไม่มี error ให้เห็น
 function withRetry(fn, attemptsLeft) {
   if (attemptsLeft === undefined) attemptsLeft = 2;
-  return fn().catch(err => {
+  return Promise.resolve().then(fn).catch(err => {
     if (attemptsLeft > 0) {
       return new Promise(resolve => setTimeout(resolve, 900)).then(() => withRetry(fn, attemptsLeft - 1));
     }
@@ -415,6 +417,12 @@ function checkConfigured() {
   const keyBad = !SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.indexOf('PASTE_YOUR') === 0;
   if (urlBad || keyBad) {
     setSyncStatus(false, '⚠ ยังไม่ได้ตั้งค่า Supabase - กดปุ่ม ⚙');
+    document.getElementById('retryConnectBtn').style.display = 'inline';
+    return false;
+  }
+  if (typeof window.supabase === 'undefined') {
+    setSyncStatus(false, '⚠ โหลดไลบรารี Supabase ไม่สำเร็จ - ตรวจสอบอินเทอร์เน็ตแล้วกดลองใหม่');
+    document.getElementById('retryConnectBtn').style.display = 'inline';
     return false;
   }
   return true;
@@ -1329,9 +1337,24 @@ function init() {
   document.getElementById('retryConnectBtn').style.display = 'none';
   // Supabase เป็นบริการที่ทำงานตลอดเวลา ไม่มีข้อจำกัดเรื่องคำขอพร้อมกันแบบ Apps Script
   // จึงโหลดทั้ง 3 อย่างพร้อมกันได้เต็มที่ เร็วที่สุด ไม่ต้องกังวลเรื่องคนใช้งานพร้อมกันหลายคน
+  // ตั้ง timeout สำรองไว้ 15 วินาที กันไม่ให้ค้างที่ "กำลังเชื่อมต่อ..." ตลอดไปไม่ว่าจะเกิดอะไรขึ้นก็ตาม
+  let settled = false;
+  const timeoutId = setTimeout(() => {
+    if (settled) return;
+    settled = true;
+    setSyncStatus(false, '⚠ เชื่อมต่อนานเกินไป ลองใหม่อีกครั้ง');
+    document.getElementById('retryConnectBtn').style.display = 'inline';
+  }, 15000);
+
   Promise.all([loadCompressors(), loadEmployees(), loadReadings({})]).then(() => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timeoutId);
     setSyncStatus(true, '✅ เชื่อมต่อสำเร็จ');
   }).catch(err => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timeoutId);
     setSyncStatus(false, '⚠ เชื่อมต่อไม่ได้: ' + (err.message || err));
     document.getElementById('retryConnectBtn').style.display = 'inline';
   });
