@@ -193,6 +193,22 @@
   .round-badge.missed { background:var(--red-soft); color:var(--red); }
   .round-badge.pending { background:var(--dark-soft); color:var(--muted); }
   .round-badge-label { font-size:9px; opacity:0.85; display:block; }
+
+  /* tech-facing status widget (top of log entry tab) */
+  .tech-status-card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px 14px; margin-bottom:18px; box-shadow:var(--shadow); }
+  .tech-status-header { font-weight:700; font-size:13px; color:var(--accent); margin-bottom:8px; display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; }
+  .tech-status-shift-row { display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px dashed var(--border); }
+  .tech-status-shift-row:last-child { border-bottom:none; }
+  .tech-status-shift-name { font-weight:800; width:44px; flex-shrink:0; font-size:12.5px; color:var(--text); }
+  .tech-status-chip { padding:3px 8px; border-radius:20px; font-size:11px; font-weight:700; white-space:nowrap; }
+  .tech-status-chip.ok { background:var(--green-soft); color:var(--green); }
+  .tech-status-chip.late { background:#FBF0DC; color:#8A6415; }
+  .tech-status-chip.missed { background:var(--red-soft); color:var(--red); }
+  .tech-status-chip.current { outline:2px solid var(--accent); }
+  .tech-late-list { margin-top:10px; padding-top:10px; border-top:1px solid var(--border); }
+  .tech-late-title { font-size:11.5px; font-weight:700; color:var(--red); margin-bottom:6px; }
+  .tech-late-item { font-size:12px; color:var(--text); padding:4px 0; display:flex; justify-content:space-between; gap:8px; }
+  .tech-late-item .tli-late { color:var(--red); font-weight:700; flex-shrink:0; }
   .emp-row-top { display:flex; justify-content:space-between; align-items:center; gap:8px; }
   .emp-row-name { font-weight:700; font-size:14px; }
   .emp-row-code { color:var(--muted); font-size:12px; margin-top:2px; }
@@ -266,6 +282,12 @@
   <!-- ========== TAB 1: บันทึกค่า ========== -->
   <div class="view active" id="view-log">
     <div id="logSuccess"></div>
+
+    <div class="tech-status-card" id="techStatusCard">
+      <div class="tech-status-header">📊 สถานะการจดวันนี้ <span id="techStatusRefreshedAt" style="font-weight:400; color:var(--muted); font-size:10.5px;"></span></div>
+      <div id="techStatusShifts" class="loading-text" style="padding:14px;">กำลังโหลด...</div>
+      <div id="techLateListWrap"></div>
+    </div>
 
     <div class="section-title">ข้อมูลผู้กรอก</div>
     <div class="field">
@@ -849,6 +871,7 @@ function handleReadingSaveSuccess(row, recovered) {
   selectedCompressor = null;
   renderCompInfo(); renderParamFields();
   loadReadings();
+  renderTechStatusBar();
   setTimeout(() => { box.innerHTML=''; }, 7000);
 }
 
@@ -1660,6 +1683,76 @@ function renderRoundsTab() {
   loadShiftRounds().then(doRender).catch(doRender);
 }
 
+/* ================= แถบสถานะการจดเครื่องวันนี้ (หน้าบันทึกค่า ให้ทุกคนเห็น ไม่ใช่แค่แอดมิน) =================
+ * แสดงสรุปทั้ง 3 กะของวันนี้ (ตรงเวลา/ล่าช้า/ไม่ได้จด) + รายชื่อเครื่องที่ "ล่าช้า" อยู่ตอนนี้
+ * เพื่อให้ช่างเห็นและรีบไปจดก่อนที่จะพ้นเวลาแล้วกลายเป็น "ไม่ได้จดเครื่อง"
+ */
+function renderTechStatusBar() {
+  const now = new Date();
+  const dateStr = todayDateStr();
+  const currentShift = getCurrentShiftGuess(now);
+
+  const rangeStart = new Date(dateStr + 'T00:00:00'); rangeStart.setHours(-1, 0, 0, 0);
+  const rangeEnd = new Date(dateStr + 'T00:00:00'); rangeEnd.setDate(rangeEnd.getDate() + 2);
+
+  withRetry(() => getSbClient().from('readings').select('id,compressor_id,timestamp')
+    .gte('timestamp', rangeStart.toISOString()).lt('timestamp', rangeEnd.toISOString())
+  ).then(({ data, error }) => {
+    if (error) throw new Error(error.message);
+    const scopedReadings = data || [];
+
+    const shiftSummaries = {};
+    const lateItems = [];
+
+    ['A', 'B', 'C'].forEach(shift => {
+      const roundDateTimes = getShiftRoundDateTimes(dateStr, shift);
+      const roundHours = ROUND_HOURS_BY_SHIFT[shift] || [];
+      let ontime = 0, late = 0, missed = 0;
+      compressors.forEach(c => {
+        roundDateTimes.forEach((rdt, i) => {
+          const res = computeRoundStatus(c.id, rdt, now, scopedReadings);
+          if (res.status === 'ontime') ontime++;
+          else if (res.status === 'late') { late++; lateItems.push({ comp:c, shift, hour:roundHours[i], lateMin:res.lateMin }); }
+          else if (res.status === 'missed') missed++;
+        });
+      });
+      shiftSummaries[shift] = { ontime, late, missed };
+    });
+
+    const shiftLabel = { A:'กะ A', B:'กะ B', C:'กะ C' };
+    document.getElementById('techStatusShifts').innerHTML = ['A','B','C'].map(shift => {
+      const s = shiftSummaries[shift];
+      const isCurrent = shift === currentShift;
+      return '<div class="tech-status-shift-row">' +
+        '<div class="tech-status-shift-name">' + shiftLabel[shift] + (isCurrent ? ' 🔸' : '') + '</div>' +
+        '<div class="tech-status-chip ok' + (isCurrent ? ' current' : '') + '">✔ ' + s.ontime + '</div>' +
+        '<div class="tech-status-chip late">🟡 ' + s.late + '</div>' +
+        '<div class="tech-status-chip missed">🔴 ' + s.missed + '</div>' +
+      '</div>';
+    }).join('');
+
+    // เรียงตัวที่ล่าช้ามากสุดขึ้นก่อน ให้เห็นตัวที่ใกล้จะพ้นเวลากลายเป็น "ไม่ได้จด" มากที่สุดก่อน
+    lateItems.sort((a, b) => b.lateMin - a.lateMin);
+    const lateWrap = document.getElementById('techLateListWrap');
+    if (lateItems.length) {
+      lateWrap.innerHTML = '<div class="tech-late-list">' +
+        '<div class="tech-late-title">⚠ เครื่องที่ล่าช้าอยู่ตอนนี้ (' + lateItems.length + ' รายการ)</div>' +
+        lateItems.slice(0, 8).map(item => {
+          const hh = String(item.hour).padStart(2,'0') + ':00';
+          return '<div class="tech-late-item"><span>' + escapeHtml(item.comp.no_label) + ' — ' + shiftLabel[item.shift] + ' รอบ ' + hh + '</span><span class="tli-late">ช้า ' + item.lateMin + ' นาที</span></div>';
+        }).join('') +
+        (lateItems.length > 8 ? '<div style="font-size:11px; color:var(--muted); margin-top:4px;">และอีก ' + (lateItems.length - 8) + ' รายการ</div>' : '') +
+      '</div>';
+    } else {
+      lateWrap.innerHTML = '';
+    }
+
+    document.getElementById('techStatusRefreshedAt').textContent = '· อัปเดตล่าสุด ' + now.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' });
+  }).catch(() => {
+    document.getElementById('techStatusShifts').innerHTML = '<div class="empty-state" style="padding:10px;">โหลดสถานะไม่สำเร็จ</div>';
+  });
+}
+
 function stdField(label, minKey, maxKey, c) {
   return '<div class="std-row">' +
     '<div class="std-label">' + label + '</div>' +
@@ -1878,6 +1971,7 @@ function init() {
     settled = true;
     clearTimeout(timeoutId);
     setSyncStatus(true, '✅ เชื่อมต่อสำเร็จ');
+    renderTechStatusBar();
   }).catch(err => {
     if (settled) return;
     settled = true;
@@ -1889,10 +1983,10 @@ function init() {
 document.getElementById('retryConnectBtn').addEventListener('click', init);
 init();
 
-// รีเฟรชค่ามาตรฐานเครื่อง Compressor เงียบๆ ทุก 5 นาที เผื่อแอดมินแก้ไขค่ามาตรฐานระหว่างที่หน้าเว็บเปิดค้างไว้นาน
+// รีเฟรชค่ามาตรฐานเครื่อง Compressor + แถบสถานะการจดเงียบๆ ทุก 5 นาที เผื่อเปิดหน้าเว็บค้างไว้นาน
 // จะได้เห็นผลอัตโนมัติโดยไม่ต้อง reload หน้าเว็บเอง (ไม่มีตัวโหลดให้เห็น ไม่รบกวนการใช้งาน)
 setInterval(() => {
-  loadCompressors().then(() => { renderHistory(); }).catch(() => { /* เงียบไว้ ไม่รบกวนผู้ใช้ */ });
+  loadCompressors().then(() => { renderHistory(); renderTechStatusBar(); }).catch(() => { /* เงียบไว้ ไม่รบกวนผู้ใช้ */ });
 }, 5 * 60 * 1000);
 </script>
 </body>
