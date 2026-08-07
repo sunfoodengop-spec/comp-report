@@ -1609,16 +1609,27 @@ function loadShiftRounds() {
   }).catch(() => {});
 }
 
-// คืนรายการเวลารอบ (Date object) ของกะที่เลือก โดยอิง "วันที่เริ่มกะ" ที่ผู้ใช้เลือก
-// กะ B รอบเที่ยงคืน (00:00) จะอยู่ในวันถัดไปเสมอ เพราะกะ B เริ่ม 16:00 ของวันที่เลือก ยาวข้ามคืน
+// คืนรายการเวลารอบ (Date object) ของกะที่เลือก โดยอิง "วันที่เริ่มวันทำงาน" (วันที่กะ A เริ่ม) ไม่ใช่วันปฏิทินทั่วไป
+// กะ B รอบเที่ยงคืน (00:00) อยู่วันถัดไปเสมอ (กะ B เริ่ม 16:00 ของวันที่เลือก ยาวข้ามคืน)
+// กะ C ทั้งรอบ ถือเป็น "เช้ามืดของวันถัดไป" เสมอ เพราะกะ C ต่อจากกะ B ของคืนเดียวกัน (วันทำงานเดียวกัน แต่ข้ามวันปฏิทิน)
 function getShiftRoundDateTimes(baseDateStr, shift) {
   const hours = ROUND_HOURS_BY_SHIFT[shift] || [];
   return hours.map(h => {
     const d = new Date(baseDateStr + 'T00:00:00');
     d.setHours(h, 0, 0, 0);
     if (shift === 'B' && h === 0) d.setDate(d.getDate() + 1);
+    if (shift === 'C') d.setDate(d.getDate() + 1);
     return d;
   });
+}
+
+// วันที่ "เริ่มวันทำงาน" ปัจจุบัน — ยึดกะ A เป็นจุดเริ่มวันใหม่ ไม่ใช่เที่ยงคืน
+// ถ้าตอนนี้ยังไม่ถึง 8 โมงเช้า (ยังอยู่ในช่วงกะ C ซึ่งต่อท้ายกะ B ของเมื่อคืน) ให้ถือว่ายังอยู่ใน "วันทำงานของเมื่อวาน"
+function getWorkingDayAnchorDateStr(now) {
+  const d = new Date(now);
+  if (d.getHours() < 8) d.setDate(d.getDate() - 1);
+  const pad = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
 }
 
 // เทียบเวลาจริงของ compressor หนึ่งเครื่อง กับรอบที่กำหนด แล้วคืนสถานะ
@@ -1724,7 +1735,7 @@ document.getElementById('roundsTrackSaveBtn').addEventListener('click', function
 function renderRoundsTab() {
   const dateInput = document.getElementById('roundsDateInput');
   const shiftSelect = document.getElementById('roundsShiftSelect');
-  if (!dateInput.value) dateInput.value = todayDateStr();
+  if (!dateInput.value) dateInput.value = getWorkingDayAnchorDateStr(new Date());
   if (!shiftSelect.dataset.userSet) shiftSelect.value = getCurrentShiftGuess(new Date());
 
   const doRender = () => {
@@ -1815,25 +1826,13 @@ function renderRoundsTab() {
  * แสดงสรุปทั้ง 3 กะของวันนี้ (ตรงเวลา/ล่าช้า/ไม่ได้จด) + รายชื่อเครื่องที่ "ล่าช้า" อยู่ตอนนี้
  * เพื่อให้ช่างเห็นและรีบไปจดก่อนที่จะพ้นเวลาแล้วกลายเป็น "ไม่ได้จดเครื่อง"
  */
-// กะ C (00:00-08:00) กำกวมได้ว่า "วันนี้" หมายถึงเช้ามืดที่ผ่านมาแล้ว หรือคืนนี้ที่กำลังจะมาถึง
-// ถ้ายังไม่ถึง 8 โมงเช้า ให้ถือว่ากะ C ของวันนี้คือช่วงเช้ามืดที่กำลังดำเนินอยู่/เพิ่งผ่าน (ใช้วันที่วันนี้)
-// ถ้าเลย 8 โมงเช้าไปแล้ว (เข้ากะ A/B แล้ว) ให้ถือว่า "กะ C ของวันนี้" หมายถึงคืนนี้/พรุ่งนี้เช้ามืดแทน (วันถัดไป)
-function getShiftDateAnchor(shift, now) {
-  const pad = n => String(n).padStart(2, '0');
-  if (shift === 'C' && now.getHours() >= 8) {
-    const d = new Date(now); d.setDate(d.getDate() + 1);
-    return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
-  }
-  return todayDateStr();
-}
-
 function renderTechStatusBar() {
   const now = new Date();
-  const dateStr = todayDateStr();
+  const workingDayStr = getWorkingDayAnchorDateStr(now);
   const currentShift = getCurrentShiftGuess(now);
 
-  const rangeStart = new Date(dateStr + 'T00:00:00'); rangeStart.setHours(-1, 0, 0, 0);
-  const rangeEnd = new Date(dateStr + 'T00:00:00'); rangeEnd.setDate(rangeEnd.getDate() + 3); // ขยายช่วงเผื่อกะ C อ้างอิงวันถัดไป
+  const rangeStart = new Date(workingDayStr + 'T00:00:00'); rangeStart.setHours(-1, 0, 0, 0);
+  const rangeEnd = new Date(workingDayStr + 'T00:00:00'); rangeEnd.setDate(rangeEnd.getDate() + 3); // ขยายช่วงเผื่อกะ C/B อ้างอิงวันถัดไป
 
   withRetry(() => getSbClient().from('readings').select('id,compressor_id,timestamp')
     .gte('timestamp', rangeStart.toISOString()).lt('timestamp', rangeEnd.toISOString())
@@ -1845,8 +1844,7 @@ function renderTechStatusBar() {
     const lateItems = [];
 
     ['A', 'B', 'C'].forEach(shift => {
-      const anchorDate = getShiftDateAnchor(shift, now);
-      const roundDateTimes = getShiftRoundDateTimes(anchorDate, shift);
+      const roundDateTimes = getShiftRoundDateTimes(workingDayStr, shift);
       const roundHours = ROUND_HOURS_BY_SHIFT[shift] || [];
       let ontime = 0, late = 0, missed = 0;
       compressors.filter(isTrackedForRounds).forEach(c => {
