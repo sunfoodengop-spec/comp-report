@@ -180,6 +180,19 @@
   .sheet-copy-btn { background:none; border:none; cursor:pointer; font-size:13px; padding:0 4px 0 0; vertical-align:middle; }
   tr.sheet-source-row td { background:var(--accent-soft) !important; }
   .sheet-input.sheet-dirty { border-color:var(--accent); background:var(--accent-soft); }
+
+  /* round tracking dashboard */
+  .rounds-zone-group { background:var(--panel); border:1px solid var(--border); border-radius:12px; margin-bottom:12px; overflow:hidden; box-shadow:var(--shadow); }
+  .rounds-zone-header { padding:10px 14px; font-weight:700; font-size:13px; color:var(--accent); background:var(--panel2); border-bottom:1px solid var(--border); }
+  .rounds-machine-row { display:flex; align-items:center; gap:8px; padding:9px 14px; border-bottom:1px dashed var(--border); font-size:12.5px; }
+  .rounds-machine-row:last-child { border-bottom:none; }
+  .rounds-machine-name { flex:1; font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .round-badge { flex-shrink:0; min-width:64px; text-align:center; padding:5px 6px; border-radius:8px; font-size:10.5px; font-weight:700; }
+  .round-badge.ontime { background:var(--green-soft); color:var(--green); }
+  .round-badge.late { background:#FBF0DC; color:#8A6415; }
+  .round-badge.missed { background:var(--red-soft); color:var(--red); }
+  .round-badge.pending { background:var(--dark-soft); color:var(--muted); }
+  .round-badge-label { font-size:9px; opacity:0.85; display:block; }
   .emp-row-top { display:flex; justify-content:space-between; align-items:center; gap:8px; }
   .emp-row-name { font-weight:700; font-size:14px; }
   .emp-row-code { color:var(--muted); font-size:12px; margin-top:2px; }
@@ -322,6 +335,7 @@
         <div class="subtab" data-sub="std">ตั้งค่ามาตรฐาน</div>
         <div class="subtab" data-sub="bulk">ตั้งค่าหลายเครื่อง</div>
         <div class="subtab" data-sub="sheet">ตารางค่ามาตรฐาน</div>
+        <div class="subtab" data-sub="rounds">รอบตรวจเช็ค</div>
         <div class="subtab" data-sub="emp">จัดการพนักงาน</div>
       </div>
 
@@ -389,6 +403,34 @@
           <table id="sheetTable"></table>
         </div>
         <button class="save-std-btn" id="sheetSaveAllBtn" style="margin-top:14px;">💾 บันทึกทั้งหมด</button>
+      </div>
+
+      <div class="subview" id="sub-rounds">
+        <div class="filter-bar">
+          <input type="date" id="roundsDateInput" style="flex:1; padding:9px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+          <select id="roundsShiftSelect" style="flex:1;">
+            <option value="A">กะ A (09:00, 12:00, 15:00)</option>
+            <option value="B">กะ B (18:00, 21:00, 00:00)</option>
+            <option value="C">กะ C (03:00, 06:00)</option>
+          </select>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:16px;">
+          <div class="daily-summary-card" style="padding:12px 8px;">
+            <div class="daily-summary-num" id="roundsCompletionPct" style="font-size:24px;">-</div>
+            <div class="daily-summary-label" style="font-size:11px;">% ครบถ้วน</div>
+          </div>
+          <div class="daily-summary-card" style="padding:12px 8px;">
+            <div class="daily-summary-num" id="roundsMissedCount" style="font-size:24px;">-</div>
+            <div class="daily-summary-label" style="font-size:11px;">ไม่ได้จด (รอบ)</div>
+          </div>
+          <div class="daily-summary-card" style="padding:12px 8px;">
+            <div class="daily-summary-num zero" id="roundsAvgLate" style="font-size:24px;">-</div>
+            <div class="daily-summary-label" style="font-size:11px;">ช้าเฉลี่ย (นาที)</div>
+          </div>
+        </div>
+
+        <div id="roundsMatrixWrap"></div>
       </div>
 
       <div class="subview" id="sub-emp">
@@ -1122,6 +1164,7 @@ document.querySelectorAll('.subtab').forEach(tab => {
     if (this.dataset.sub === 'emp') renderEmployeeList();
     if (this.dataset.sub === 'bulk') renderBulkEditor();
     if (this.dataset.sub === 'sheet') renderSheetEditor();
+    if (this.dataset.sub === 'rounds') renderRoundsTab();
   });
 });
 
@@ -1447,6 +1490,175 @@ document.getElementById('sheetSaveAllBtn').addEventListener('click', function() 
     alert('บันทึกสำเร็จทั้งหมด ' + updates.length + ' เครื่อง');
   }).catch(err => { btn.disabled = false; btn.textContent = originalText; alert('เชื่อมต่อไม่ได้: ' + (err.message||err)); });
 });
+
+/* ================= Tracking การจดเครื่อง (Scheduled Rounds) =================
+ * ตารางรอบ: ทุก 3 ชม. วนทั้งวัน (00,03,06,09,12,15,18,21 น.) แต่ละรอบผูกกับกะใดกะหนึ่งตามที่กำหนด
+ * โหลดตารางรอบจริงจาก Supabase (shift_rounds) ถ้ามี ไม่งั้น fallback เป็นค่าคงที่ในโค้ดนี้
+ * สถานะคำนวณสด (live) จากข้อมูล readings จริง เทียบกับเวลาปัจจุบันเสมอ ไม่มีการเก็บ "สถานะ" แช่แข็งไว้ที่ไหน
+ * — เพื่อไม่ให้เกิดปัญหาข้อมูลค้าง/ไม่ตรงกับความเป็นจริงแบบที่เจอกับ is_abnormal ก่อนหน้านี้
+ */
+const ON_TIME_GRACE_MINUTES = 15; // ก่อน/หลังเวลารอบไม่เกินกี่นาทีถือว่า "ตรงเวลา" — ปรับได้ตรงนี้
+let ROUND_HOURS_BY_SHIFT = { A:[9,12,15], B:[18,21,0], C:[3,6] }; // ค่าเริ่มต้น (fallback) ถ้าโหลดจากฐานข้อมูลไม่สำเร็จ
+
+function loadShiftRounds() {
+  return getSbClient().from('shift_rounds').select('*').order('sort_order').then(({ data, error }) => {
+    if (error || !data || !data.length) return; // ใช้ fallback เงียบๆ ถ้ายังไม่ได้สร้างตารางนี้
+    const map = { A:[], B:[], C:[] };
+    data.forEach(r => { if (map[r.shift]) map[r.shift].push(r.round_hour); });
+    if (map.A.length && map.B.length && map.C.length) ROUND_HOURS_BY_SHIFT = map;
+  }).catch(() => {});
+}
+
+// คืนรายการเวลารอบ (Date object) ของกะที่เลือก โดยอิง "วันที่เริ่มกะ" ที่ผู้ใช้เลือก
+// กะ B รอบเที่ยงคืน (00:00) จะอยู่ในวันถัดไปเสมอ เพราะกะ B เริ่ม 16:00 ของวันที่เลือก ยาวข้ามคืน
+function getShiftRoundDateTimes(baseDateStr, shift) {
+  const hours = ROUND_HOURS_BY_SHIFT[shift] || [];
+  return hours.map(h => {
+    const d = new Date(baseDateStr + 'T00:00:00');
+    d.setHours(h, 0, 0, 0);
+    if (shift === 'B' && h === 0) d.setDate(d.getDate() + 1);
+    return d;
+  });
+}
+
+// เทียบเวลาจริงของ compressor หนึ่งเครื่อง กับรอบที่กำหนด แล้วคืนสถานะ
+function computeRoundStatus(compressorId, roundDateTime, now, readingsList) {
+  const graceMs = ON_TIME_GRACE_MINUTES * 60000;
+  const windowStart = new Date(roundDateTime.getTime() - graceMs);
+  const nextRoundDateTime = new Date(roundDateTime.getTime() + 3 * 3600000);
+
+  const candidates = readingsList
+    .filter(r => String(r.compressor_id) === String(compressorId))
+    .map(r => ({ r, t: new Date(r.timestamp) }))
+    .filter(x => x.t >= windowStart && x.t < nextRoundDateTime)
+    .sort((a, b) => a.t - b.t);
+
+  if (candidates.length) {
+    const first = candidates[0];
+    const lateMin = Math.round((first.t - roundDateTime) / 60000);
+    if (Math.abs(lateMin) <= ON_TIME_GRACE_MINUTES) return { status:'ontime', lateMin };
+    return { status:'late', lateMin };
+  }
+  if (now >= nextRoundDateTime) return { status:'missed', lateMin:null };
+  return { status:'pending', lateMin:null };
+}
+
+function getCurrentShiftGuess(now) {
+  const h = now.getHours();
+  const hourList = [[0,'B'],[3,'C'],[6,'C'],[9,'A'],[12,'A'],[15,'A'],[18,'B'],[21,'B']];
+  // หากะที่ "รอบล่าสุดที่ผ่านมา" ตรงกับตอนนี้มากที่สุด
+  let best = 'A', bestDiff = Infinity;
+  hourList.forEach(([rh, sh]) => {
+    let diff = h - rh;
+    if (diff < 0) diff += 24;
+    if (diff < bestDiff) { bestDiff = diff; best = sh; }
+  });
+  return best;
+}
+
+function todayDateStr() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+}
+
+function roundBadgeHtml(status, lateMin, roundHour) {
+  const hh = String(roundHour).padStart(2,'0') + ':00';
+  if (status === 'ontime') return '<div class="round-badge ontime"><span class="round-badge-label">' + hh + '</span>✔ ตรงเวลา</div>';
+  if (status === 'late') return '<div class="round-badge late"><span class="round-badge-label">' + hh + '</span>ช้า ' + lateMin + ' นาที</div>';
+  if (status === 'missed') return '<div class="round-badge missed"><span class="round-badge-label">' + hh + '</span>❌ ไม่ได้จด</div>';
+  return '<div class="round-badge pending"><span class="round-badge-label">' + hh + '</span>ยังไม่ถึงเวลา</div>';
+}
+
+function renderRoundsTab() {
+  const dateInput = document.getElementById('roundsDateInput');
+  const shiftSelect = document.getElementById('roundsShiftSelect');
+  if (!dateInput.value) dateInput.value = todayDateStr();
+  if (!shiftSelect.dataset.userSet) shiftSelect.value = getCurrentShiftGuess(new Date());
+
+  const doRender = () => {
+    const dateStr = dateInput.value || todayDateStr();
+    const shift = shiftSelect.value;
+    const now = new Date();
+    const roundDateTimes = getShiftRoundDateTimes(dateStr, shift);
+    const roundHours = ROUND_HOURS_BY_SHIFT[shift] || [];
+
+    document.getElementById('roundsMatrixWrap').innerHTML = '<div class="loading-text">กำลังโหลด...</div>';
+
+    // ดึงข้อมูลเฉพาะช่วงวันที่ต้องใช้จริง (ไม่พึ่งแคช 30 วันของหน้าประวัติ) กันเผลอฟันธง "ไม่ได้จด" ผิดตอนดูวันที่เก่ากว่า 30 วัน
+    const rangeStart = new Date(dateStr + 'T00:00:00'); rangeStart.setHours(-1,0,0,0);
+    const rangeEnd = new Date(dateStr + 'T00:00:00'); rangeEnd.setDate(rangeEnd.getDate() + 2);
+
+    withRetry(() => getSbClient().from('readings').select('id,compressor_id,timestamp')
+      .gte('timestamp', rangeStart.toISOString()).lt('timestamp', rangeEnd.toISOString())
+    ).then(({ data, error }) => {
+      if (error) throw new Error(error.message);
+      const scopedReadings = data || [];
+
+      let ontimeCount = 0, lateCount = 0, missedCount = 0, pendingCount = 0;
+      const lateMinutesList = [];
+      const zoneGroups = {}; // zone -> [{comp, cells:[{status,lateMin,hour}]}]
+
+      compressors.forEach(c => {
+        const cells = roundDateTimes.map((rdt, i) => {
+          const res = computeRoundStatus(c.id, rdt, now, scopedReadings);
+          if (res.status === 'ontime') { ontimeCount++; lateMinutesList.push(res.lateMin); }
+          else if (res.status === 'late') { lateCount++; lateMinutesList.push(res.lateMin); }
+          else if (res.status === 'missed') missedCount++;
+          else pendingCount++;
+          return { status: res.status, lateMin: res.lateMin, hour: roundHours[i] };
+        });
+        const zone = (c.zone && c.zone.trim()) ? c.zone.trim() : 'ไม่ระบุโซน';
+        if (!zoneGroups[zone]) zoneGroups[zone] = [];
+        zoneGroups[zone].push({ comp: c, cells });
+      });
+
+      const dueCount = ontimeCount + lateCount + missedCount; // ไม่นับ pending (ยังไม่ถึงเวลา) เป็นตัวหาร
+      const completionPct = dueCount > 0 ? Math.round(((ontimeCount + lateCount) / dueCount) * 100) : 0;
+      const avgLate = lateCount > 0 ? Math.round(lateMinutesList.filter(m => m > 0).reduce((a,b)=>a+b,0) / Math.max(1, lateCount)) : 0;
+
+      document.getElementById('roundsCompletionPct').textContent = completionPct + '%';
+      document.getElementById('roundsCompletionPct').className = 'daily-summary-num' + (completionPct >= 100 ? ' zero' : '') ;
+      document.getElementById('roundsMissedCount').textContent = missedCount;
+      document.getElementById('roundsAvgLate').textContent = avgLate;
+
+      // เรียงโซน: โซนที่มีรายการ "ไม่ได้จด" มาก่อน เพื่อให้เห็นปัญหาเด่นสุดก่อน ตามด้วยเรียงชื่อ
+      const zoneNames = Object.keys(zoneGroups).sort((a, b) => {
+        const missedA = zoneGroups[a].reduce((n, m) => n + m.cells.filter(x => x.status==='missed').length, 0);
+        const missedB = zoneGroups[b].reduce((n, m) => n + m.cells.filter(x => x.status==='missed').length, 0);
+        if (missedA !== missedB) return missedB - missedA;
+        if (a === 'ไม่ระบุโซน') return 1;
+        if (b === 'ไม่ระบุโซน') return -1;
+        return a.localeCompare(b, 'th');
+      });
+
+      const wrap = document.getElementById('roundsMatrixWrap');
+      wrap.innerHTML = zoneNames.map(zone => {
+        const items = zoneGroups[zone];
+        const zoneMissed = items.reduce((n, m) => n + m.cells.filter(x => x.status==='missed').length, 0);
+        const rowsHtml = items.map(item => {
+          const cellsHtml = item.cells.map(cell => roundBadgeHtml(cell.status, cell.lateMin, cell.hour)).join('');
+          return '<div class="rounds-machine-row">' +
+            '<div class="rounds-machine-name">' + escapeHtml(item.comp.no_label) + '</div>' +
+            cellsHtml +
+          '</div>';
+        }).join('');
+        return '<div class="rounds-zone-group">' +
+          '<div class="rounds-zone-header">📍 ' + escapeHtml(zone) + (zoneMissed > 0 ? ' <span style="color:var(--red);">— ไม่ได้จด ' + zoneMissed + ' รอบ</span>' : ' <span style="color:var(--green);">✔ ครบ</span>') + '</div>' +
+          rowsHtml +
+        '</div>';
+      }).join('');
+    }).catch(err => {
+      document.getElementById('roundsMatrixWrap').innerHTML = '<div class="empty-state">เชื่อมต่อไม่ได้: ' + escapeHtml(err.message||String(err)) + '</div>';
+    });
+  };
+
+  dateInput.onchange = doRender;
+  shiftSelect.onchange = function() { this.dataset.userSet = '1'; doRender(); };
+
+  // โหลดตารางรอบจากฐานข้อมูลก่อน (เผื่อยังไม่เคยโหลด) แล้วค่อย render
+  loadShiftRounds().then(doRender).catch(doRender);
+}
 
 function stdField(label, minKey, maxKey, c) {
   return '<div class="std-row">' +
