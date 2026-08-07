@@ -428,6 +428,17 @@
       </div>
 
       <div class="subview" id="sub-rounds">
+        <button type="button" class="emp-btn" id="roundsTrackSettingsToggle" style="width:100%; margin-bottom:10px;">⚙ ตั้งค่าเครื่องที่นับในแดชบอร์ด</button>
+        <div class="std-editor-card" id="roundsTrackSettingsPanel" style="display:none; margin-bottom:16px;">
+          <div style="font-size:11.5px; color:var(--muted); margin-bottom:10px;">ติ๊กเฉพาะเครื่องที่ต้องการให้นับในหน้านี้และแถบสถานะหน้าจดบันทึก — เครื่องที่ไม่ติ๊กจะไม่ถูกนับเป็น "ไม่ได้จด/ล่าช้า" เลย</div>
+          <div style="display:flex; gap:8px; margin-bottom:10px;">
+            <button class="emp-btn" id="roundsTrackSelectAllBtn" style="flex:1;">เลือกทั้งหมด</button>
+            <button class="emp-btn" id="roundsTrackSelectNoneBtn" style="flex:1;">ยกเลิกทั้งหมด</button>
+          </div>
+          <div id="roundsTrackCompList" style="max-height:260px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; padding:8px; margin-bottom:12px;"></div>
+          <button class="save-std-btn" id="roundsTrackSaveBtn">💾 บันทึกการตั้งค่านี้</button>
+        </div>
+
         <div class="filter-bar">
           <input type="date" id="roundsDateInput" style="flex:1; padding:9px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
           <select id="roundsShiftSelect" style="flex:1;">
@@ -604,6 +615,9 @@ function populateCompressorSelects() {
 
 /* ================= โหลดข้อมูลพนักงาน ================= */
 function isActiveEmployee(e) { return e.active === true || e.active === 'TRUE' || e.active === 'true'; }
+
+// เครื่องที่แอดมินติ๊กไม่ให้นับในแดชบอร์ด "รอบตรวจเช็ค" / แถบสถานะหน้าจดบันทึก (ค่าเริ่มต้น = นับทุกเครื่อง ถ้ายังไม่เคยตั้งค่า)
+function isTrackedForRounds(c) { return c.track_rounds !== false && c.track_rounds !== 'false' && c.track_rounds !== 'FALSE'; }
 
 function loadEmployees() {
   return withRetry(() => getSbClient().from('employees').select('*').order('emp_name')).then(({data, error}) => {
@@ -1593,6 +1607,57 @@ function roundBadgeHtml(status, lateMin, roundHour) {
   return '<div class="round-badge pending"><span class="round-badge-label">' + hh + '</span>ยังไม่ถึงเวลา</div>';
 }
 
+/* ---------- ตั้งค่าเครื่องที่จะนับในแดชบอร์ด Tracking ---------- */
+document.getElementById('roundsTrackSettingsToggle').addEventListener('click', function() {
+  const panel = document.getElementById('roundsTrackSettingsPanel');
+  const showing = panel.style.display !== 'none';
+  if (showing) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  renderRoundsTrackList();
+});
+
+function renderRoundsTrackList() {
+  const wrap = document.getElementById('roundsTrackCompList');
+  wrap.innerHTML = compressors.map(c => {
+    const checked = isTrackedForRounds(c) ? 'checked' : '';
+    return '<label class="bulk-comp-row">' +
+      '<input type="checkbox" class="rounds-track-cb" value="' + c.id + '" ' + checked + '>' +
+      '<span><span class="bcname">' + escapeHtml(c.no_label) + '</span> ' +
+        '<span class="bcmeta">' + escapeHtml(c.load_area||'') + (c.zone ? (' · ' + escapeHtml(c.zone)) : '') + '</span></span>' +
+    '</label>';
+  }).join('');
+}
+
+document.getElementById('roundsTrackSelectAllBtn').addEventListener('click', () => {
+  document.querySelectorAll('.rounds-track-cb').forEach(cb => cb.checked = true);
+});
+document.getElementById('roundsTrackSelectNoneBtn').addEventListener('click', () => {
+  document.querySelectorAll('.rounds-track-cb').forEach(cb => cb.checked = false);
+});
+
+document.getElementById('roundsTrackSaveBtn').addEventListener('click', function() {
+  const checkedIds = new Set(Array.from(document.querySelectorAll('.rounds-track-cb:checked')).map(cb => Number(cb.value)));
+  const trueIds = compressors.filter(c => checkedIds.has(c.id)).map(c => c.id);
+  const falseIds = compressors.filter(c => !checkedIds.has(c.id)).map(c => c.id);
+
+  const btn = this;
+  const originalText = btn.textContent;
+  btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+
+  const ops = [];
+  if (trueIds.length) ops.push(getSbClient().from('compressors').update({ track_rounds: true }).in('id', trueIds));
+  if (falseIds.length) ops.push(getSbClient().from('compressors').update({ track_rounds: false }).in('id', falseIds));
+
+  Promise.all(ops.map(op => withRetry(() => op))).then(results => {
+    const err = results.find(r => r.error);
+    btn.disabled = false; btn.textContent = originalText;
+    if (err) { alert('เกิดข้อผิดพลาด: ' + err.error.message); return; }
+    compressors.forEach(c => { c.track_rounds = checkedIds.has(c.id); compressorsById[c.id].track_rounds = checkedIds.has(c.id); });
+    alert('บันทึกการตั้งค่าเรียบร้อย');
+    renderRoundsTab();
+  }).catch(err => { btn.disabled = false; btn.textContent = originalText; alert('เชื่อมต่อไม่ได้: ' + (err.message||err)); });
+});
+
 function renderRoundsTab() {
   const dateInput = document.getElementById('roundsDateInput');
   const shiftSelect = document.getElementById('roundsShiftSelect');
@@ -1622,7 +1687,7 @@ function renderRoundsTab() {
       const lateMinutesList = [];
       const zoneGroups = {}; // zone -> [{comp, cells:[{status,lateMin,hour}]}]
 
-      compressors.forEach(c => {
+      compressors.filter(isTrackedForRounds).forEach(c => {
         const cells = roundDateTimes.map((rdt, i) => {
           const res = computeRoundStatus(c.id, rdt, now, scopedReadings);
           if (res.status === 'ontime') { ontimeCount++; lateMinutesList.push(res.lateMin); }
@@ -1721,7 +1786,7 @@ function renderTechStatusBar() {
       const roundDateTimes = getShiftRoundDateTimes(anchorDate, shift);
       const roundHours = ROUND_HOURS_BY_SHIFT[shift] || [];
       let ontime = 0, late = 0, missed = 0;
-      compressors.forEach(c => {
+      compressors.filter(isTrackedForRounds).forEach(c => {
         roundDateTimes.forEach((rdt, i) => {
           const res = computeRoundStatus(c.id, rdt, now, scopedReadings);
           if (res.status === 'ontime') ontime++;
