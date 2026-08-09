@@ -94,12 +94,19 @@
   /* reading cards */
   .reading-card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:12px; box-shadow:var(--shadow); }
   .reading-card.abnormal { border-color:rgba(163,59,50,0.4); }
+  .reading-card.stopped { border-color:rgba(122,117,112,0.4); background:var(--dark-soft); }
   .reading-top { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
   .reading-comp { font-weight:700; font-size:14.5px; }
   .reading-area { color:var(--muted); font-size:12px; }
   .reading-time { color:var(--muted); font-size:11.5px; white-space:nowrap; }
   .abn-badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; background:var(--red-soft); color:var(--red); margin-top:6px; }
   .ok-badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; background:var(--green-soft); color:var(--green); margin-top:6px; }
+  .note-badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; background:#FBF0DC; color:#8A6415; margin-top:6px; }
+  .stopped-badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:700; background:var(--dark-soft); color:var(--dark); margin-top:6px; }
+
+  .stop-toggle-btn { width:100%; padding:13px; border-radius:10px; border:1.5px solid var(--border); background:var(--panel2); color:var(--text); font-weight:700; font-size:13.5px; cursor:pointer; margin-bottom:16px; }
+  .stop-toggle-btn.active { background:var(--dark); border-color:var(--dark); color:#FFFFFF; }
+  .stopped-notice { background:var(--dark-soft); color:var(--dark); border-radius:10px; padding:12px 14px; font-size:12.5px; margin-bottom:16px; font-weight:600; }
   .reading-emp { font-size:12px; color:var(--muted); margin-top:6px; }
   .reading-vals { margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:6px 12px; font-size:12px; }
   .reading-vals .k { color:var(--muted); }
@@ -140,6 +147,9 @@
   .daily-compact-time { color:var(--muted); font-size:11px; flex-shrink:0; width:38px; }
   .daily-compact-comp { font-weight:700; color:var(--text); flex-shrink:0; }
   .daily-compact-desc { color:var(--red); flex:1; min-width:0; }
+  .daily-zone-header.note-header { color:#8A6415; }
+  .daily-zone-count.note-count { color:#8A6415; background:#FBF0DC; }
+  .daily-compact-desc.note-desc { color:#8A6415; }
 
   .std-editor-card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; box-shadow:var(--shadow); }
   .std-row { display:grid; grid-template-columns:1fr 70px 70px; gap:8px; align-items:center; margin-bottom:10px; }
@@ -317,12 +327,15 @@
     </div>
     <div class="compressor-info" id="compInfo" style="display:none;"></div>
 
-    <div class="section-title">ค่าพารามิเตอร์</div>
+    <button type="button" id="stopMachineBtn" class="stop-toggle-btn" style="display:none;">⏸ เครื่องนี้หยุดเดินอยู่ (ไม่ต้องกรอกค่า)</button>
+    <div id="stoppedNotice" class="stopped-notice" style="display:none;">⏸ บันทึกนี้จะระบุว่า "เครื่องหยุดเดิน" — ไม่ต้องกรอกค่าพารามิเตอร์ และจะไม่ถูกนับเป็นความผิดปกติ</div>
+
+    <div class="section-title" id="paramSectionTitle">ค่าพารามิเตอร์</div>
     <div id="paramFields"></div>
 
     <div class="field">
-      <label>ความผิดปกติอื่นๆ (ถ้ามี)</label>
-      <textarea id="noteField" placeholder="ระบุความผิดปกติอื่นๆ ที่พบ เช่น เสียงดังผิดปกติ, มีรอยรั่ว ฯลฯ"></textarea>
+      <label>หมายเหตุ / ข้อสังเกตอื่นๆ (ถ้ามี)</label>
+      <textarea id="noteField" placeholder="เช่น เปลี่ยนไส้กรองแล้ว, ได้ยินเสียงผิดปกติเล็กน้อย ฯลฯ — ถ้าไม่มีค่าเกินมาตรฐาน จะขึ้นเป็นหมายเหตุสีเหลือง ไม่ถูกนับเป็นความผิดปกติ"></textarea>
     </div>
 
     <button class="submit-btn" id="submitBtn">บันทึกข้อมูล</button>
@@ -341,6 +354,8 @@
     <div class="chip-row">
       <div class="chip active" data-abn="all">ทั้งหมด</div>
       <div class="chip" data-abn="abnormal">เฉพาะผิดปกติ</div>
+      <div class="chip" data-abn="note">เฉพาะมีหมายเหตุ</div>
+      <div class="chip" data-abn="stopped">เฉพาะเครื่องหยุด</div>
     </div>
     <button class="export-btn-full" id="exportFilteredBtn">📤 Export Excel (ตามตัวกรองนี้)</button>
     <button class="export-btn-full secondary" id="exportAllByCompBtn">📤 Export ทั้งหมด (แยกชีทตามเครื่อง)</button>
@@ -693,11 +708,34 @@ document.getElementById('empSelect').addEventListener('change', function() {
 });
 
 /* ================= TAB 1: ฟอร์มบันทึกค่า ================= */
+let isMachineStopped = false;
+
 document.getElementById('compSelect').addEventListener('change', function() {
   const id = this.value;
   selectedCompressor = compressors.find(c => String(c.id) === String(id)) || null;
+  isMachineStopped = false;
+  updateStopToggleUI();
   renderCompInfo();
   renderParamFields();
+});
+
+function updateStopToggleUI() {
+  const btn = document.getElementById('stopMachineBtn');
+  const notice = document.getElementById('stoppedNotice');
+  const title = document.getElementById('paramSectionTitle');
+  const fields = document.getElementById('paramFields');
+
+  btn.style.display = selectedCompressor ? 'block' : 'none';
+  btn.classList.toggle('active', isMachineStopped);
+  btn.textContent = isMachineStopped ? '✅ ทำเครื่องหมายว่าหยุดเดินอยู่ (กดเพื่อยกเลิก)' : '⏸ เครื่องนี้หยุดเดินอยู่ (ไม่ต้องกรอกค่า)';
+  notice.style.display = isMachineStopped ? 'block' : 'none';
+  title.style.display = isMachineStopped ? 'none' : 'block';
+  fields.style.display = isMachineStopped ? 'none' : 'block';
+}
+
+document.getElementById('stopMachineBtn').addEventListener('click', function() {
+  isMachineStopped = !isMachineStopped;
+  updateStopToggleUI();
 });
 
 function renderCompInfo() {
@@ -913,10 +951,14 @@ function handleReadingSaveSuccess(row, recovered) {
   const computed = computeAbnormal(row);
   const box = document.getElementById('logSuccess');
   const prefix = recovered ? '✅ บันทึกสำเร็จแล้ว (พบว่าบันทึกไปแล้วจากการลองส่งซ้ำครั้งก่อน)' : null;
-  if (computed.isAbnormal) {
+  if (row.is_stopped) {
+    box.innerHTML = '<div class="success-banner">' + (prefix || '✅ บันทึกสำเร็จ') + ' — บันทึกว่าเครื่องหยุดเดินอยู่</div>';
+  } else if (computed.isAbnormal) {
     box.innerHTML = '<div class="success-banner abn">⚠ ' + (prefix || 'บันทึกสำเร็จ') + ' — พบค่าผิดปกติ!' +
       (computed.list.length ? ('<ul>' + computed.list.map(a=>'<li>'+escapeHtml(a)+'</li>').join('') + '</ul>') : '') +
       '</div>';
+  } else if (computed.hasNote) {
+    box.innerHTML = '<div class="success-banner">' + (prefix || '✅ บันทึกสำเร็จ') + ' — บันทึกหมายเหตุไว้แล้ว (ไม่มีค่าเกินมาตรฐาน)</div>';
   } else {
     box.innerHTML = '<div class="success-banner">' + (prefix || '✅ บันทึกสำเร็จ') + (prefix ? '' : ' — ค่าทั้งหมดอยู่ในเกณฑ์ปกติ') + '</div>';
   }
@@ -924,6 +966,8 @@ function handleReadingSaveSuccess(row, recovered) {
   document.getElementById('noteField').value = '';
   document.getElementById('compSelect').value = '';
   selectedCompressor = null;
+  isMachineStopped = false;
+  updateStopToggleUI();
   renderCompInfo(); renderParamFields();
   loadReadings();
   renderTechStatusBar();
@@ -944,14 +988,17 @@ document.getElementById('submitBtn').addEventListener('click', function() {
     employee_name: selectedEmployee.emp_name,
     employee_code: selectedEmployee.emp_code,
     note: document.getElementById('noteField').value.trim(),
+    is_stopped: isMachineStopped,
     // รหัสอ้างอิงเฉพาะของการส่งครั้งนี้ — ฐานข้อมูลบังคับห้ามซ้ำ (unique constraint) กันข้อมูลซ้ำจากการลองส่งซ้ำอัตโนมัติ/กดซ้ำได้แน่นอน 100%
     client_request_id: 'req_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10)
   };
-  document.querySelectorAll('#paramFields input[data-field]').forEach(input => {
-    if (input.value !== '' && input.value !== '-' && !isNaN(Number(input.value))) {
-      row[input.dataset.field] = Number(input.value);
-    }
-  });
+  if (!isMachineStopped) {
+    document.querySelectorAll('#paramFields input[data-field]').forEach(input => {
+      if (input.value !== '' && input.value !== '-' && !isNaN(Number(input.value))) {
+        row[input.dataset.field] = Number(input.value);
+      }
+    });
+  }
 
   const btn = this;
   isSubmittingReading = true;
@@ -1026,6 +1073,10 @@ const ABNORMAL_CHECK_LIST = [
 ];
 
 function computeAbnormal(r) {
+  const hasNote = !!(r.note && String(r.note).trim() !== '');
+  // เครื่องที่บันทึกว่า "หยุดเดิน" ไม่ต้องเทียบค่ามาตรฐานเลย (ไม่มีค่าให้เทียบอยู่แล้ว) ไม่ถือเป็นผิดปกติ
+  if (r.is_stopped) return { isAbnormal: false, hasNote: hasNote, list: [] };
+
   const comp = compressorsById[r.compressor_id];
   const list = [];
   ABNORMAL_CHECK_LIST.forEach(pc => {
@@ -1044,11 +1095,21 @@ function computeAbnormal(r) {
       list.push(label + ': ' + num + ' (สูงกว่ามาตรฐาน ' + (hasMin ? min + '-' : '') + max + ')');
     }
   });
-  const hasNote = r.note && String(r.note).trim() !== '';
-  return { isAbnormal: list.length > 0 || hasNote, list: list };
+  // "ผิดปกติ" (แดง) นับเฉพาะกรณีมีค่าเกินมาตรฐานจริงเท่านั้น — มีโน้ต/คอมเมนต์เฉยๆ โดยไม่มีค่าเกิน จะไม่ถูกนับเป็นผิดปกติ (ไปอยู่กลุ่ม "มีหมายเหตุ" สีเหลืองแทน)
+  return { isAbnormal: list.length > 0, hasNote: hasNote, list: list };
 }
 
 function isAbnormalRow(r) { return computeAbnormal(r).isAbnormal; }
+
+// สถานะรวมของ reading หนึ่งแถว ใช้จัดลำดับความสำคัญตอนแสดงผล (badge/สี)
+// stopped (เครื่องหยุด) > abnormal (แดง) > note (เหลือง มีหมายเหตุแต่ไม่เกินมาตรฐาน) > normal (เขียว)
+function getReadingKind(r) {
+  if (r.is_stopped) return 'stopped';
+  const c = computeAbnormal(r);
+  if (c.isAbnormal) return 'abnormal';
+  if (c.hasNote) return 'note';
+  return 'normal';
+}
 
 function fmtDate(d) {
   const dt = new Date(d);
@@ -1072,16 +1133,23 @@ function readingValueRows(r) {
 
 function renderReadingCard(r) {
   const computed = computeAbnormal(r);
-  const abn = computed.isAbnormal;
+  const kind = getReadingKind(r);
   const vals = readingValueRows(r);
-  return '<div class="reading-card' + (abn?' abnormal':'') + '">' +
+  const cardClass = kind === 'abnormal' ? ' abnormal' : (kind === 'stopped' ? ' stopped' : '');
+  let badgeHtml;
+  if (kind === 'stopped') badgeHtml = '<div class="stopped-badge">⏸ เครื่องหยุดเดิน</div>';
+  else if (kind === 'abnormal') badgeHtml = '<div class="abn-badge">⚠ พบความผิดปกติ</div>';
+  else if (kind === 'note') badgeHtml = '<div class="note-badge">📝 มีหมายเหตุ</div>';
+  else badgeHtml = '<div class="ok-badge">✔ ปกติ</div>';
+
+  return '<div class="reading-card' + cardClass + '">' +
     '<div class="reading-top">' +
       '<div><div class="reading-comp">' + escapeHtml(r.no_label) + '</div><div class="reading-area">' + escapeHtml(r.load_area||'') + '</div></div>' +
       '<div class="reading-time">' + fmtDate(r.timestamp) + '</div>' +
     '</div>' +
-    (abn ? '<div class="abn-badge">⚠ พบความผิดปกติ</div>' : '<div class="ok-badge">✔ ปกติ</div>') +
+    badgeHtml +
     '<div class="reading-emp">👤 ' + escapeHtml(r.employee_name) + ' (' + escapeHtml(r.employee_code) + ')</div>' +
-    '<div class="reading-vals">' + vals.map(v => '<div class="k">'+v[0]+'</div><div class="v">'+v[1]+'</div>').join('') + '</div>' +
+    (kind !== 'stopped' ? '<div class="reading-vals">' + vals.map(v => '<div class="k">'+v[0]+'</div><div class="v">'+v[1]+'</div>').join('') + '</div>' : '') +
     (computed.list.length ? '<div class="reading-abn-list">' + computed.list.map(escapeHtml).join('<br>') + '</div>' : '') +
     (r.note ? '<div class="reading-note">📝 ' + escapeHtml(r.note) + '</div>' : '') +
   '</div>';
@@ -1091,7 +1159,9 @@ function getFilteredHistoryItems() {
   const compFilter = document.getElementById('histCompFilter').value;
   let items = readings.slice();
   if (compFilter) items = items.filter(r => String(r.compressor_id) === String(compFilter));
-  if (histAbnFilter === 'abnormal') items = items.filter(isAbnormalRow);
+  if (histAbnFilter === 'abnormal') items = items.filter(r => getReadingKind(r) === 'abnormal');
+  else if (histAbnFilter === 'note') items = items.filter(r => getReadingKind(r) === 'note');
+  else if (histAbnFilter === 'stopped') items = items.filter(r => getReadingKind(r) === 'stopped');
   return items;
 }
 
@@ -1123,6 +1193,8 @@ function sanitizeFilename(s) {
 
 function readingToExportRow(r) {
   const computed = computeAbnormal(r);
+  const kind = getReadingKind(r);
+  const statusLabel = { stopped:'เครื่องหยุดเดิน', abnormal:'ผิดปกติ', note:'มีหมายเหตุ', normal:'ปกติ' }[kind];
   return {
     'วันที่-เวลา': fmtDate(r.timestamp),
     'เครื่อง': r.no_label,
@@ -1142,9 +1214,9 @@ function readingToExportRow(r) {
     'Low Cap (%)': r.low_cap,
     'High Cap (%)': r.high_cap,
     'Motor Current (A)': r.motor_current,
-    'ความผิดปกติอื่นๆ': r.note,
+    'หมายเหตุ': r.note,
     'รายการที่เกินมาตรฐาน': computed.list.join(' | '),
-    'สถานะ': computed.isAbnormal ? 'ผิดปกติ' : 'ปกติ'
+    'สถานะ': statusLabel
   };
 }
 
@@ -1264,48 +1336,73 @@ function renderDailyReport() {
 
   // ให้แน่ใจว่ามีข้อมูลย้อนหลังพอ (โหลดแบบ all ถ้าจำเป็น)
   const proceed = () => {
-    const items = readings.filter(r => {
+    const dayItems = readings.filter(r => {
       const t = new Date(r.timestamp);
-      return t >= yStart && t <= yEnd && isAbnormalRow(r);
+      return t >= yStart && t <= yEnd;
     });
+    const abnormalItems = dayItems.filter(r => getReadingKind(r) === 'abnormal');
+    const noteItems = dayItems.filter(r => getReadingKind(r) === 'note');
+
     const countEl = document.getElementById('dailyCount');
-    countEl.textContent = items.length;
-    countEl.className = 'daily-summary-num' + (items.length===0 ? ' zero' : '');
+    countEl.textContent = abnormalItems.length;
+    countEl.className = 'daily-summary-num' + (abnormalItems.length===0 ? ' zero' : '');
     document.getElementById('dailyLabel').textContent =
       'ความผิดปกติที่พบเมื่อวานนี้ (' + yStart.toLocaleDateString('th-TH') + ')';
 
     const listEl = document.getElementById('dailyList');
-    if (!items.length) { listEl.innerHTML = '<div class="empty-state">✅ ไม่พบความผิดปกติเมื่อวานนี้</div>'; return; }
+    let html = '';
 
-    // จัดกลุ่มตามโซน/ห้อง (compressor ที่ยังไม่ได้กำหนดโซน จะรวมอยู่ท้ายสุด)
-    const groups = {};
-    items.forEach(r => {
-      const comp = compressors.find(c => String(c.id) === String(r.compressor_id));
-      const zone = (comp && comp.zone && String(comp.zone).trim()) ? String(comp.zone).trim() : 'ไม่ระบุโซน';
-      if (!groups[zone]) groups[zone] = [];
-      groups[zone].push(r);
-    });
-    const zoneNames = Object.keys(groups).sort((a, b) => {
-      if (a === 'ไม่ระบุโซน') return 1;
-      if (b === 'ไม่ระบุโซน') return -1;
-      return a.localeCompare(b, 'th');
-    });
+    if (!abnormalItems.length) {
+      html += '<div class="empty-state">✅ ไม่พบความผิดปกติเมื่อวานนี้</div>';
+    } else {
+      // จัดกลุ่มตามโซน/ห้อง (compressor ที่ยังไม่ได้กำหนดโซน จะรวมอยู่ท้ายสุด)
+      const groups = {};
+      abnormalItems.forEach(r => {
+        const comp = compressors.find(c => String(c.id) === String(r.compressor_id));
+        const zone = (comp && comp.zone && String(comp.zone).trim()) ? String(comp.zone).trim() : 'ไม่ระบุโซน';
+        if (!groups[zone]) groups[zone] = [];
+        groups[zone].push(r);
+      });
+      const zoneNames = Object.keys(groups).sort((a, b) => {
+        if (a === 'ไม่ระบุโซน') return 1;
+        if (b === 'ไม่ระบุโซน') return -1;
+        return a.localeCompare(b, 'th');
+      });
 
-    listEl.innerHTML = zoneNames.map(zone => {
-      const rows = groups[zone].slice().sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-      const rowsHtml = rows.map(r => {
-        const time = new Date(r.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+      html += zoneNames.map(zone => {
+        const rows = groups[zone].slice().sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        const rowsHtml = rows.map(r => {
+          const time = new Date(r.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+          return '<div class="daily-compact-row">' +
+            '<span class="daily-compact-time">' + time + '</span>' +
+            '<span class="daily-compact-comp">' + escapeHtml(r.no_label) + '</span>' +
+            '<span class="daily-compact-desc">' + escapeHtml(shortAbnormalSummary(r)) + '</span>' +
+          '</div>';
+        }).join('');
+        return '<div class="daily-zone-group">' +
+          '<div class="daily-zone-header">📍 ' + escapeHtml(zone) + '<span class="daily-zone-count">' + rows.length + ' รายการ</span></div>' +
+          rowsHtml +
+        '</div>';
+      }).join('');
+    }
+
+    // ส่วนแยกต่างหาก: รายการที่มีแค่หมายเหตุ (ไม่มีค่าเกินมาตรฐาน) — แสดงให้เห็น แต่ไม่นับรวมในยอดผิดปกติด้านบน
+    if (noteItems.length) {
+      const rowsHtml = noteItems.slice().sort((a,b) => new Date(b.timestamp)-new Date(a.timestamp)).map(r => {
+        const time = new Date(r.timestamp).toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' });
         return '<div class="daily-compact-row">' +
           '<span class="daily-compact-time">' + time + '</span>' +
           '<span class="daily-compact-comp">' + escapeHtml(r.no_label) + '</span>' +
-          '<span class="daily-compact-desc">' + escapeHtml(shortAbnormalSummary(r)) + '</span>' +
+          '<span class="daily-compact-desc note-desc">' + escapeHtml(String(r.note||'').slice(0,90)) + '</span>' +
         '</div>';
       }).join('');
-      return '<div class="daily-zone-group">' +
-        '<div class="daily-zone-header">📍 ' + escapeHtml(zone) + '<span class="daily-zone-count">' + rows.length + ' รายการ</span></div>' +
+      html += '<div class="daily-zone-group note-group">' +
+        '<div class="daily-zone-header note-header">📝 มีหมายเหตุ (ไม่นับเป็นผิดปกติ)<span class="daily-zone-count note-count">' + noteItems.length + ' รายการ</span></div>' +
         rowsHtml +
       '</div>';
-    }).join('');
+    }
+
+    listEl.innerHTML = html;
   };
   loadReadings({all:true}).then(proceed).catch(proceed);
 }
