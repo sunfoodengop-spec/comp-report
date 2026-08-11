@@ -283,13 +283,16 @@
   .oilglass-preset-btn.selected { border-color:#D8A94D; color:#8A6415; background:#FBF0DC; }
   .oilglass-warn-text { font-size:11.5px; color:var(--red); margin-top:8px; font-weight:600; }
 
-  /* tank level widget (คล้าย oil glass แต่เป็นทรงแทงก์แนวตั้ง สีน้ำเงิน) */
-  .tanklvl-svgwrap { flex-shrink:0; width:70px; height:91px; position:relative; }
+  /* tank level widget — ทรงกล่อง 3D แบบ isometric (หน้า/ข้าง/บน) ให้ดูสมจริงเหมือนแทงก์จริง */
+  .tanklvl-svgwrap { flex-shrink:0; width:86px; height:105px; position:relative; }
   .tanklvl-svgwrap svg { width:100%; height:100%; }
-  .tanklvl-outline { fill:var(--panel2); stroke:var(--border); stroke-width:3; }
-  .tanklvl-fill { fill:#4F8FC0; }
-  .tanklvl-meniscus { stroke:#2F6FA8; stroke-width:1.6; }
-  .tanklvl-ring { fill:none; stroke:var(--dark); stroke-opacity:0.15; stroke-width:2; }
+  .tanklvl-face-top { fill:#EAF4FA; stroke:none; }
+  .tanklvl-face-side { fill:#B9D6E6; stroke:none; }
+  .tanklvl-face-front { fill:#DCEEF7; stroke:none; }
+  .tanklvl-fill-front { fill:#4F9FD4; }
+  .tanklvl-fill-side { fill:#2E6FA0; }
+  .tanklvl-meniscus-f, .tanklvl-meniscus-s { stroke:rgba(255,255,255,0.65); stroke-width:1.8; }
+  .tanklvl-edge { stroke:#3A5A6E; stroke-opacity:0.45; stroke-width:1.3; stroke-linejoin:round; }
 
   /* export */
   .export-btn-full { width:100%; padding:12px; border-radius:10px; border:1px solid var(--accent); background:var(--panel); color:var(--accent); font-weight:700; font-size:13.5px; cursor:pointer; margin-bottom:10px; }
@@ -437,6 +440,8 @@
         <div class="subtab" data-sub="rounds">รอบตรวจเช็ค</div>
         <div class="subtab" data-sub="chart">กราฟแนวโน้ม</div>
         <div class="subtab" data-sub="emp">จัดการพนักงาน</div>
+        <div class="subtab" data-sub="water-tank">💧 แท็งก์น้ำเย็น</div>
+        <div class="subtab" data-sub="water-chart">💧 กราฟผลผลิตน้ำ</div>
       </div>
 
       <div class="subview active" id="sub-daily">
@@ -579,104 +584,89 @@
         </div>
         <div id="employeeList"></div>
       </div>
-    </div>
-  </div>
 
-  <!-- ========== WATER MODULE: บันทึกค่า ========== -->
-  <div class="view" id="view-water-log">
-    <div id="waterLogSuccess"></div>
-
-    <div class="section-title">ข้อมูลผู้กรอก</div>
-    <div class="field">
-      <label>ชื่อ-รหัสพนักงาน</label>
-      <select id="waterEmpSelect"><option value="">-- เลือกพนักงาน --</option></select>
-    </div>
-
-    <div class="section-title">เลือกระบบ Ripple Plate</div>
-    <div class="field">
-      <label>ระบบ</label>
-      <select id="waterSystemSelect"><option value="">-- เลือกระบบ --</option></select>
-    </div>
-    <div class="compressor-info" id="waterSystemInfo" style="display:none;"></div>
-
-    <button type="button" id="waterStopBtn" class="stop-toggle-btn" style="display:none;">⏸ ระบบนี้ไม่ได้เดินเครื่อง (ไม่ต้องกรอกค่า)</button>
-    <div id="waterStoppedNotice" class="stopped-notice" style="display:none;">⏸ บันทึกนี้จะระบุว่า "ไม่ได้เดินเครื่อง" — ไม่ต้องกรอกค่าพารามิเตอร์ และจะไม่ถูกนับเป็นความผิดปกติ</div>
-
-    <div class="section-title" id="waterParamSectionTitle">ค่าพารามิเตอร์</div>
-    <div id="waterParamFields"></div>
-
-    <div class="field">
-      <label>หมายเหตุ / ความผิดปกติอื่นๆ (ถ้ามี)</label>
-      <textarea id="waterNoteField" placeholder="เช่น ท่อรั่วเล็กน้อย, เสียงปั๊มดังผิดปกติ ฯลฯ"></textarea>
-    </div>
-
-    <button class="submit-btn" id="waterSubmitBtn">บันทึกข้อมูล</button>
-  </div>
-
-  <!-- ========== WATER MODULE: ประวัติ ========== -->
-  <div class="view" id="view-water-history">
-    <div class="filter-bar">
-      <select id="waterHistSystemFilter"><option value="">ทุกระบบ</option></select>
-      <select id="waterHistRangeFilter">
-        <option value="7">7 วันล่าสุด</option>
-        <option value="30" selected>30 วันล่าสุด</option>
-        <option value="all">ทั้งหมด</option>
-      </select>
-    </div>
-    <div class="chip-row">
-      <div class="chip active" data-abn="all">ทั้งหมด</div>
-      <div class="chip" data-abn="abnormal">เฉพาะผิดปกติ</div>
-      <div class="chip" data-abn="stopped">เฉพาะไม่ได้เดินเครื่อง</div>
-    </div>
-    <button class="export-btn-full" id="waterExportBtn">📤 Export Excel</button>
-    <div id="waterHistoryList"><div class="loading-text">กำลังโหลด...</div></div>
-  </div>
-
-  <!-- ========== WATER MODULE: แอดมิน ========== -->
-  <div class="view" id="view-water-admin">
-    <div class="pin-gate" id="waterPinGate">
-      <div class="pin-icon">🔒</div>
-      <div class="pin-title">สำหรับแอดมินเท่านั้น</div>
-      <div class="pin-sub">กรอกรหัส PIN เพื่อเข้าใช้งาน</div>
-      <input type="password" inputmode="numeric" maxlength="6" class="pin-input" id="waterPinInput" placeholder="••••">
-      <div class="pin-error" id="waterPinError"></div>
-    </div>
-
-    <div id="waterAdminContent" style="display:none;">
-      <div class="lock-bar">
-        <span>🔓 เข้าสู่ระบบแอดมินแล้ว</span>
-        <button id="waterLockBtn">ล็อก</button>
+      <div class="subview" id="sub-water-tank">
+        <div class="section-title">💧 สถานะแท็งก์น้ำเย็น (Realtime)</div>
+        <div id="waterTankStatusWrap"><div class="loading-text">กำลังโหลด...</div></div>
       </div>
 
-      <div class="section-title">💧 สถานะแท็งก์น้ำเย็น (Realtime)</div>
-      <div id="waterTankStatusWrap"></div>
-
-      <div class="section-title">📈 กราฟกำลังการผลิตแต่ละระบบ</div>
-      <div class="std-editor-card" style="margin-bottom:16px;">
-        <div class="two-col">
-          <div class="field"><label>จากวันที่</label><input type="date" id="waterChartFromDate"></div>
-          <div class="field"><label>ถึงวันที่</label><input type="date" id="waterChartToDate"></div>
+      <div class="subview" id="sub-water-chart">
+        <div class="section-title">📈 กราฟกำลังการผลิตแต่ละระบบ</div>
+        <div class="std-editor-card" style="margin-bottom:16px;">
+          <div class="two-col">
+            <div class="field"><label>จากวันที่</label><input type="date" id="waterChartFromDate"></div>
+            <div class="field"><label>ถึงวันที่</label><input type="date" id="waterChartToDate"></div>
+          </div>
+          <button class="save-std-btn" id="waterChartGenerateBtn">📈 สร้างกราฟ</button>
         </div>
-        <button class="save-std-btn" id="waterChartGenerateBtn">📈 สร้างกราฟ</button>
-      </div>
-      <div id="waterChartResultWrap" style="display:none; margin-bottom:20px;">
-        <div style="overflow-x:auto; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; box-shadow:var(--shadow);">
-          <canvas id="waterTrendChart" height="300"></canvas>
+        <div id="waterChartResultWrap" style="display:none; margin-bottom:20px;">
+          <div style="overflow-x:auto; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; box-shadow:var(--shadow);">
+            <canvas id="waterTrendChart" height="300"></canvas>
+          </div>
+          <button class="export-btn-full" id="waterChartDownloadBtn" style="margin-top:12px;">💾 บันทึกภาพกราฟ (PNG ความละเอียดสูง)</button>
         </div>
-        <button class="export-btn-full" id="waterChartDownloadBtn" style="margin-top:12px;">💾 บันทึกภาพกราฟ (PNG ความละเอียดสูง)</button>
       </div>
     </div>
   </div>
+
+<!-- ========== WATER MODULE: บันทึกค่า ========== -->
+<div class="view" id="view-water-log">
+  <div id="waterLogSuccess"></div>
+
+  <div class="section-title">ข้อมูลผู้กรอก</div>
+  <div class="field">
+    <label>ชื่อ-รหัสพนักงาน</label>
+    <select id="waterEmpSelect"><option value="">-- เลือกพนักงาน --</option></select>
+  </div>
+
+  <div class="section-title">เลือกระบบ Ripple Plate</div>
+  <div class="field">
+    <label>ระบบ</label>
+    <select id="waterSystemSelect"><option value="">-- เลือกระบบ --</option></select>
+  </div>
+  <div class="compressor-info" id="waterSystemInfo" style="display:none;"></div>
+
+  <button type="button" id="waterStopBtn" class="stop-toggle-btn" style="display:none;">⏸ ระบบนี้ไม่ได้เดินเครื่อง (ไม่ต้องกรอกค่า)</button>
+  <div id="waterStoppedNotice" class="stopped-notice" style="display:none;">⏸ บันทึกนี้จะระบุว่า "ไม่ได้เดินเครื่อง" — ไม่ต้องกรอกค่าพารามิเตอร์ และจะไม่ถูกนับเป็นความผิดปกติ</div>
+
+  <div class="section-title" id="waterParamSectionTitle">ค่าพารามิเตอร์</div>
+  <div id="waterParamFields"></div>
+
+  <div class="field">
+    <label>หมายเหตุ / ความผิดปกติอื่นๆ (ถ้ามี)</label>
+    <textarea id="waterNoteField" placeholder="เช่น ท่อรั่วเล็กน้อย, เสียงปั๊มดังผิดปกติ ฯลฯ"></textarea>
+  </div>
+
+  <button class="submit-btn" id="waterSubmitBtn">บันทึกข้อมูล</button>
+</div>
+
+<!-- ========== WATER MODULE: ประวัติ ========== -->
+<div class="view" id="view-water-history">
+  <div class="filter-bar">
+    <select id="waterHistSystemFilter"><option value="">ทุกระบบ</option></select>
+    <select id="waterHistRangeFilter">
+      <option value="7">7 วันล่าสุด</option>
+      <option value="30" selected>30 วันล่าสุด</option>
+      <option value="all">ทั้งหมด</option>
+    </select>
+  </div>
+  <div class="chip-row">
+    <div class="chip active" data-abn="all">ทั้งหมด</div>
+    <div class="chip" data-abn="abnormal">เฉพาะผิดปกติ</div>
+    <div class="chip" data-abn="stopped">เฉพาะไม่ได้เดินเครื่อง</div>
+  </div>
+  <button class="export-btn-full" id="waterExportBtn">📤 Export Excel</button>
+  <div id="waterHistoryList"><div class="loading-text">กำลังโหลด...</div></div>
+</div>
 </div>
 
 <nav class="bottom" id="bottomNav" style="display:none;">
   <div class="navwrap">
     <button class="navbtn module-btn module-compressor active" data-view="view-log"><span class="ic">📝</span>บันทึกค่า</button>
     <button class="navbtn module-btn module-compressor" data-view="view-history"><span class="ic">📋</span>ประวัติ</button>
-    <button class="navbtn module-btn module-compressor" data-view="view-admin"><span class="ic">🔐</span>แอดมิน</button>
     <button class="navbtn module-btn module-water" data-view="view-water-log" style="display:none;"><span class="ic">📝</span>บันทึกค่า</button>
     <button class="navbtn module-btn module-water" data-view="view-water-history" style="display:none;"><span class="ic">📋</span>ประวัติ</button>
-    <button class="navbtn module-btn module-water" data-view="view-water-admin" style="display:none;"><span class="ic">🔐</span>แอดมิน</button>
+    <button class="navbtn" data-view="view-admin"><span class="ic">🔐</span>แอดมิน</button>
   </div>
 </nav>
 
@@ -1473,6 +1463,8 @@ document.querySelectorAll('.subtab').forEach(tab => {
     if (this.dataset.sub === 'sheet') renderSheetEditor();
     if (this.dataset.sub === 'rounds') renderRoundsTab();
     if (this.dataset.sub === 'chart') initChartTab();
+    if (this.dataset.sub === 'water-tank') initWaterModule().then(renderWaterTankStatus);
+    if (this.dataset.sub === 'water-chart') initWaterModule();
   });
 });
 
@@ -2482,10 +2474,9 @@ function showView(viewId) {
   const navBtn = document.querySelector('.navbtn[data-view="' + viewId + '"]');
   if (navBtn) navBtn.classList.add('active');
   if (viewId === 'view-admin') showAdminState();
-  if (viewId === 'view-water-admin') showWaterAdminState();
 }
 
-function setModule(mod) {
+function setModule(mod, pushState) {
   currentModule = mod;
   localStorage.setItem('current_module', mod);
   document.querySelectorAll('.module-btn').forEach(b => {
@@ -2495,19 +2486,31 @@ function setModule(mod) {
   document.getElementById('appTitle').textContent = mod === 'water' ? '💧 รายงานผลผลิตน้ำเย็น' : '🌀 บันทึกค่า Compressor';
   showView(mod === 'water' ? 'view-water-log' : 'view-log');
   if (mod === 'water') initWaterModule();
+  // บันทึกไว้ใน browser history เพื่อให้กดปุ่ม "ย้อนกลับ" ของเบราว์เซอร์/มือถือ กลับมาหน้าแรกได้เลย ไม่ต้องกดปุ่ม 🏠 อย่างเดียว
+  if (pushState !== false) history.pushState({ page: 'module', module: mod }, '', '#' + mod);
 }
 
 document.querySelectorAll('.module-card[data-module]').forEach(card => {
   card.addEventListener('click', () => setModule(card.dataset.module));
 });
 
-document.getElementById('homeBtn').addEventListener('click', () => {
+function goHome(pushState) {
   document.getElementById('bottomNav').style.display = 'none';
   document.querySelectorAll('.navbtn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-home').classList.add('active');
   document.getElementById('appTitle').textContent = '🌀 บันทึกค่า Compressor';
+  if (pushState !== false) history.pushState({ page: 'home' }, '', '#home');
+}
+document.getElementById('homeBtn').addEventListener('click', () => goHome(true));
+
+// รองรับปุ่ม "ย้อนกลับ" ของเบราว์เซอร์/มือถือ ให้พาไปหน้าที่ถูกต้องตาม history ที่บันทึกไว้
+window.addEventListener('popstate', (e) => {
+  const state = e.state;
+  if (!state || state.page === 'home') goHome(false);
+  else if (state.page === 'module') setModule(state.module, false);
 });
+history.replaceState({ page: 'home' }, '', '#home');
 
 /* ================= การนำทาง (bottom nav) ================= */
 document.querySelectorAll('.navbtn').forEach(btn => {
@@ -2600,14 +2603,15 @@ function populateWaterSystemSelects() {
 function initWaterModule() {
   if (!waterModuleLoaded) {
     waterModuleLoaded = true;
-    loadWaterSystems().then(() => loadWaterReadings({})).catch(() => {});
     const today = new Date(); const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
     const pad = n => String(n).padStart(2,'0');
     const fmt = d => d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
     document.getElementById('waterChartToDate').value = fmt(today);
     document.getElementById('waterChartFromDate').value = fmt(weekAgo);
+    return loadWaterSystems().then(() => loadWaterReadings({})).catch(() => {});
   } else {
     renderWaterHistory();
+    return Promise.resolve();
   }
 }
 
@@ -2675,9 +2679,17 @@ function renderWaterParamFields() {
     wrap.appendChild(div);
   });
 
-  // ปริมาณน้ำในแทงก์ — widget ภาพ
+  // ปริมาณน้ำในแทงก์ — widget ภาพ (แสดงเฉพาะระบบที่กำหนดให้เป็นผู้รายงานระดับน้ำของฝั่งนั้น กันถามซ้ำ 2 รอบต่อฝั่ง)
   const tank = waterTanksById[s.tank_id];
-  wrap.appendChild(buildTankLevelWidget(tank));
+  if (s.reports_tank_level) {
+    wrap.appendChild(buildTankLevelWidget(tank));
+  } else if (tank) {
+    const note = document.createElement('div');
+    note.className = 'stopped-notice';
+    note.style.marginBottom = '16px';
+    note.textContent = 'ℹ️ ระดับน้ำในแทงก์ "' + tank.name + '" รายงานผ่านอีกระบบหนึ่งของฝั่งนี้แล้ว ไม่ต้องกรอกซ้ำที่นี่';
+    wrap.appendChild(note);
+  }
 
   // แรงดันปั๊ม / อุณหภูมิเข้า
   ['pump_pressure_bar', 'temp_in'].forEach(key => {
@@ -2740,21 +2752,16 @@ function renderWaterParamFields() {
   });
 }
 
-/* ---------- widget ภาพแสดงปริมาณน้ำในแทงก์ (คล้าย oil glass แต่เป็นทรงแทงก์แนวตั้ง) ---------- */
+/* ---------- widget ภาพแสดงปริมาณน้ำในแทงก์ แบบ 3D ทรงกล่อง (isometric) ให้ดูสมจริง ---------- */
 function buildTankLevelWidget(tank) {
   const capacity = (tank && tank.capacity_q) ? Number(tank.capacity_q) : 200;
   const half = Math.round(capacity / 2);
   const wrapDiv = document.createElement('div');
   wrapDiv.className = 'oilglass-block';
   wrapDiv.innerHTML =
-    '<div class="oilglass-label">🪣 ปริมาณน้ำในแทงก์ (Q) — ความจุ ' + capacity + ' Q' + (tank ? (' · ' + escapeHtml(tank.name)) : '') + '</div>' +
+    '<div class="oilglass-label">🧊 ปริมาณน้ำในแทงก์ (Q) — ความจุ ' + capacity + ' Q' + (tank ? (' · ' + escapeHtml(tank.name)) : '') + '</div>' +
     '<div class="oilglass-row">' +
-      '<div class="tanklvl-svgwrap">' +
-        '<svg viewBox="0 0 100 130">' +
-          '<rect class="tanklvl-outline" x="15" y="8" width="70" height="114" rx="10"/>' +
-          '<clipPath id="tankclip-' + Math.random().toString(36).slice(2,8) + '"><rect x="15" y="8" width="70" height="114" rx="10"/></clipPath>' +
-        '</svg>' +
-      '</div>' +
+      '<div class="tanklvl-svgwrap"></div>' +
       '<div class="oilglass-controls">' +
         '<input type="range" min="0" max="' + capacity + '" step="1" value="' + half + '" class="oilglass-slider tanklvl-slider" data-field="tank_level_q">' +
         '<div class="oilglass-presets">' +
@@ -2767,20 +2774,28 @@ function buildTankLevelWidget(tank) {
       '</div>' +
     '</div>';
 
-  // สร้าง SVG fill + label ด้วย DOM API เพื่อกัน id ชนกันเวลามีหลาย widget ในหน้าเดียว (แม้ปกติจะมีแค่ 1 อันต่อครั้ง)
+  // ทรงกล่อง 3D แบบ isometric: หน้า (front) + ข้าง (side, เข้มกว่า = เงา) + บน (top, อ่อนกว่า = แสง)
+  // พิกัดหน้า: (35,20)-(85,130) — พิกัดข้าง offset dx=25,dy=-15 จากหน้า — พิกัดบนคือสี่เหลี่ยมด้านขนานบนสุด
   const svgWrap = wrapDiv.querySelector('.tanklvl-svgwrap');
   const uid = 'tc' + Math.random().toString(36).slice(2,8);
   svgWrap.innerHTML =
-    '<svg viewBox="0 0 100 130">' +
-      '<rect class="tanklvl-outline" x="15" y="8" width="70" height="114" rx="10"/>' +
-      '<clipPath id="' + uid + '"><rect x="15" y="8" width="70" height="114" rx="10"/></clipPath>' +
-      '<g clip-path="url(#' + uid + ')">' +
-        '<rect class="tanklvl-fill" data-el="fill" x="15" y="122" width="70" height="0"/>' +
-        '<line class="tanklvl-meniscus" data-el="meniscus" x1="15" x2="85" y1="122" y2="122"/>' +
-      '</g>' +
-      '<rect class="tanklvl-ring" x="15" y="8" width="70" height="114" rx="10"/>' +
+    '<svg viewBox="0 0 115 140">' +
+      // ผนังกล่อง (ทึบ พื้นหลัง แสดงตอนน้ำว่าง)
+      '<polygon class="tanklvl-face-top" points="35,20 85,20 110,5 60,5"/>' +
+      '<polygon class="tanklvl-face-side" points="85,20 110,5 110,115 85,130"/>' +
+      '<rect class="tanklvl-face-front" x="35" y="20" width="50" height="110"/>' +
+      // ของเหลว (คลิปตามหน้า/ข้าง ให้สูงตามเปอร์เซ็นต์)
+      '<clipPath id="' + uid + 'f"><rect x="35" y="20" width="50" height="110"/></clipPath>' +
+      '<rect class="tanklvl-fill-front" data-el="fillfront" x="35" y="130" width="50" height="0" clip-path="url(#' + uid + 'f)"/>' +
+      '<polygon class="tanklvl-fill-side" data-el="fillside" points="85,130 110,115 110,115 85,130"/>' +
+      '<line class="tanklvl-meniscus-f" data-el="meniscusf" x1="35" x2="85" y1="130" y2="130"/>' +
+      '<line class="tanklvl-meniscus-s" data-el="meniscuss" x1="85" x2="110" y1="130" y2="115"/>' +
+      // เส้นขอบกล่อง (วาดทับบนสุด ให้เห็นทรงชัด)
+      '<polygon class="tanklvl-edge" points="35,20 85,20 110,5 60,5" fill="none"/>' +
+      '<polygon class="tanklvl-edge" points="85,20 110,5 110,115 85,130" fill="none"/>' +
+      '<rect class="tanklvl-edge" x="35" y="20" width="50" height="110" fill="none"/>' +
     '</svg>' +
-    '<div class="oilglass-pct" data-el="pctlabel">' + half + ' Q</div>';
+    '<div class="oilglass-pct" data-el="pctlabel" style="bottom:2px; top:auto; text-shadow:0 1px 3px rgba(0,0,0,0.5); color:#fff;">' + half + ' Q</div>';
 
   const slider = wrapDiv.querySelector('.tanklvl-slider');
   const presetBtns = wrapDiv.querySelectorAll('.oilglass-preset-btn');
@@ -2798,18 +2813,28 @@ function buildTankLevelWidget(tank) {
 }
 
 function updateTankLevelVisual(wrapDiv, val, capacity) {
-  const fillEl = wrapDiv.querySelector('[data-el="fill"]');
-  const meniscusEl = wrapDiv.querySelector('[data-el="meniscus"]');
+  const fillFront = wrapDiv.querySelector('[data-el="fillfront"]');
+  const fillSide = wrapDiv.querySelector('[data-el="fillside"]');
+  const meniscusF = wrapDiv.querySelector('[data-el="meniscusf"]');
+  const meniscusS = wrapDiv.querySelector('[data-el="meniscuss"]');
   const pctLabel = wrapDiv.querySelector('[data-el="pctlabel"]');
-  const pct = capacity > 0 ? (val / capacity) : 0;
-  const tankH = 114; // ความสูงของทรงแทงก์ใน viewBox
+
+  const pct = capacity > 0 ? Math.max(0, Math.min(1, val / capacity)) : 0;
+  const tankH = 110; // ความสูงหน้ากล่องใน viewBox (จาก y=20 ถึง y=130)
   const fillH = tankH * pct;
-  const y = 8 + (tankH - fillH);
-  fillEl.setAttribute('y', y);
-  fillEl.setAttribute('height', fillH);
-  meniscusEl.setAttribute('y1', y);
-  meniscusEl.setAttribute('y2', y);
-  pctLabel.textContent = val + ' Q';
+  const yFront = 130 - fillH;      // ระดับผิวน้ำที่ขอบหน้า
+  const ySide = yFront - 15;       // ระดับผิวน้ำที่ขอบหลัง (offset dy=-15 เหมือนทรงกล่อง)
+
+  fillFront.setAttribute('y', yFront);
+  fillFront.setAttribute('height', fillH);
+
+  // หน้าข้าง (ทรงสี่เหลี่ยมคางหมู): มุมล่างซ้าย-ล่างขวา คงที่ที่ก้นกล่อง มุมบนซ้าย-บนขวา อยู่ที่ระดับผิวน้ำ
+  fillSide.setAttribute('points', '85,' + yFront + ' 110,' + ySide + ' 110,115 85,130');
+
+  meniscusF.setAttribute('y1', yFront); meniscusF.setAttribute('y2', yFront);
+  meniscusS.setAttribute('y1', yFront); meniscusS.setAttribute('y2', ySide);
+
+  pctLabel.textContent = val + ' Q (' + Math.round(pct*100) + '%)';
 }
 
 /* ---------- บันทึกข้อมูล (submit) ---------- */
@@ -3021,31 +3046,6 @@ document.getElementById('waterExportBtn').addEventListener('click', function() {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'น้ำเย็น');
   XLSX.writeFile(wb, 'cold_water_log_' + new Date().toISOString().slice(0,10) + '.xlsx');
-});
-
-/* ---------- แอดมิน: PIN gate (ใช้ PIN เดียวกับโมดูล Compressor) ---------- */
-function showWaterAdminState() {
-  const gate = document.getElementById('waterPinGate');
-  const content = document.getElementById('waterAdminContent');
-  if (isAdminUnlocked()) { gate.style.display='none'; content.style.display='block'; renderWaterTankStatus(); }
-  else { gate.style.display='block'; content.style.display='none'; }
-}
-document.getElementById('waterPinInput').addEventListener('input', function() {
-  if (this.value.length >= ADMIN_PIN.length) {
-    if (this.value === ADMIN_PIN) {
-      sessionStorage.setItem('admin_unlocked','1');
-      document.getElementById('waterPinError').textContent='';
-      this.value='';
-      showWaterAdminState();
-    } else {
-      document.getElementById('waterPinError').textContent = 'รหัส PIN ไม่ถูกต้อง';
-      this.value='';
-    }
-  }
-});
-document.getElementById('waterLockBtn').addEventListener('click', function() {
-  sessionStorage.removeItem('admin_unlocked');
-  showWaterAdminState();
 });
 
 /* ---------- แอดมิน: สถานะแท็งก์แบบ Realtime ---------- */
