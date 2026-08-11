@@ -283,9 +283,27 @@
   .oilglass-preset-btn.selected { border-color:#D8A94D; color:#8A6415; background:#FBF0DC; }
   .oilglass-warn-text { font-size:11.5px; color:var(--red); margin-top:8px; font-weight:600; }
 
+  /* tank level widget (คล้าย oil glass แต่เป็นทรงแทงก์แนวตั้ง สีน้ำเงิน) */
+  .tanklvl-svgwrap { flex-shrink:0; width:70px; height:91px; position:relative; }
+  .tanklvl-svgwrap svg { width:100%; height:100%; }
+  .tanklvl-outline { fill:var(--panel2); stroke:var(--border); stroke-width:3; }
+  .tanklvl-fill { fill:#4F8FC0; }
+  .tanklvl-meniscus { stroke:#2F6FA8; stroke-width:1.6; }
+  .tanklvl-ring { fill:none; stroke:var(--dark); stroke-opacity:0.15; stroke-width:2; }
+
   /* export */
   .export-btn-full { width:100%; padding:12px; border-radius:10px; border:1px solid var(--accent); background:var(--panel); color:var(--accent); font-weight:700; font-size:13.5px; cursor:pointer; margin-bottom:10px; }
   .export-btn-full.secondary { border-style:dashed; }
+
+  /* module picker (home screen) */
+  .module-card { display:flex; align-items:center; gap:14px; background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:18px 16px; margin-bottom:14px; cursor:pointer; box-shadow:var(--shadow); transition:transform 0.1s ease; }
+  .module-card:active { transform:scale(0.98); }
+  .module-card.disabled { opacity:0.5; cursor:default; }
+  .module-card-icon { font-size:32px; flex-shrink:0; }
+  .module-card-body { flex:1; min-width:0; }
+  .module-card-title { font-weight:800; font-size:15px; color:var(--text); margin-bottom:3px; }
+  .module-card-desc { font-size:12px; color:var(--muted); line-height:1.5; }
+  .module-card-arrow { font-size:24px; color:var(--accent); flex-shrink:0; }
 </style>
 </head>
 <body>
@@ -293,19 +311,48 @@
   <header>
     <div class="row">
       <div>
-        <h1>🌀 บันทึกค่า Compressor</h1>
+        <h1 id="appTitle">🌀 บันทึกค่า Compressor</h1>
         <div class="sub" id="syncStatus">กำลังเชื่อมต่อ...</div>
         <button class="sub" id="retryConnectBtn" style="display:none; background:none; border:none; color:#FFFFFF; text-decoration:underline; padding:0; cursor:pointer; font-size:12px;">🔄 ลองเชื่อมต่อใหม่</button>
       </div>
       <div style="display:flex; gap:8px;">
+        <button class="icon-btn" id="homeBtn" title="หน้าแรก">🏠</button>
         <button class="icon-btn" id="displayModeToggleBtn" title="สลับโหมดจอ">🖥</button>
         <button class="icon-btn" id="settingsBtn">⚙</button>
       </div>
     </div>
   </header>
 
+  <!-- ========== หน้าแรก: เลือกโมดูล ========== -->
+  <div class="view active" id="view-home">
+    <div class="section-title">เลือกโมดูลที่จะใช้งาน</div>
+    <div class="module-card" data-module="compressor">
+      <div class="module-card-icon">🌀</div>
+      <div class="module-card-body">
+        <div class="module-card-title">จดเครื่อง Compressor</div>
+        <div class="module-card-desc">บันทึกค่าพารามิเตอร์ Compressor รายรอบ ติดตามความผิดปกติและรอบตรวจเช็ค</div>
+      </div>
+      <div class="module-card-arrow">›</div>
+    </div>
+    <div class="module-card" data-module="water">
+      <div class="module-card-icon">💧</div>
+      <div class="module-card-body">
+        <div class="module-card-title">รายงานผลผลิตน้ำเย็น</div>
+        <div class="module-card-desc">บันทึกข้อมูลระบบ Ripple Plate 4 ระบบ และสถานะแท็งก์น้ำเย็น</div>
+      </div>
+      <div class="module-card-arrow">›</div>
+    </div>
+    <div class="module-card disabled">
+      <div class="module-card-icon">➕</div>
+      <div class="module-card-body">
+        <div class="module-card-title">โมดูลอื่นๆ</div>
+        <div class="module-card-desc">จะเพิ่มเติมในอนาคต</div>
+      </div>
+    </div>
+  </div>
+
   <!-- ========== TAB 1: บันทึกค่า ========== -->
-  <div class="view active" id="view-log">
+  <div class="view" id="view-log">
     <div id="logSuccess"></div>
 
     <div class="tech-status-card" id="techStatusCard">
@@ -534,13 +581,102 @@
       </div>
     </div>
   </div>
+
+  <!-- ========== WATER MODULE: บันทึกค่า ========== -->
+  <div class="view" id="view-water-log">
+    <div id="waterLogSuccess"></div>
+
+    <div class="section-title">ข้อมูลผู้กรอก</div>
+    <div class="field">
+      <label>ชื่อ-รหัสพนักงาน</label>
+      <select id="waterEmpSelect"><option value="">-- เลือกพนักงาน --</option></select>
+    </div>
+
+    <div class="section-title">เลือกระบบ Ripple Plate</div>
+    <div class="field">
+      <label>ระบบ</label>
+      <select id="waterSystemSelect"><option value="">-- เลือกระบบ --</option></select>
+    </div>
+    <div class="compressor-info" id="waterSystemInfo" style="display:none;"></div>
+
+    <button type="button" id="waterStopBtn" class="stop-toggle-btn" style="display:none;">⏸ ระบบนี้ไม่ได้เดินเครื่อง (ไม่ต้องกรอกค่า)</button>
+    <div id="waterStoppedNotice" class="stopped-notice" style="display:none;">⏸ บันทึกนี้จะระบุว่า "ไม่ได้เดินเครื่อง" — ไม่ต้องกรอกค่าพารามิเตอร์ และจะไม่ถูกนับเป็นความผิดปกติ</div>
+
+    <div class="section-title" id="waterParamSectionTitle">ค่าพารามิเตอร์</div>
+    <div id="waterParamFields"></div>
+
+    <div class="field">
+      <label>หมายเหตุ / ความผิดปกติอื่นๆ (ถ้ามี)</label>
+      <textarea id="waterNoteField" placeholder="เช่น ท่อรั่วเล็กน้อย, เสียงปั๊มดังผิดปกติ ฯลฯ"></textarea>
+    </div>
+
+    <button class="submit-btn" id="waterSubmitBtn">บันทึกข้อมูล</button>
+  </div>
+
+  <!-- ========== WATER MODULE: ประวัติ ========== -->
+  <div class="view" id="view-water-history">
+    <div class="filter-bar">
+      <select id="waterHistSystemFilter"><option value="">ทุกระบบ</option></select>
+      <select id="waterHistRangeFilter">
+        <option value="7">7 วันล่าสุด</option>
+        <option value="30" selected>30 วันล่าสุด</option>
+        <option value="all">ทั้งหมด</option>
+      </select>
+    </div>
+    <div class="chip-row">
+      <div class="chip active" data-abn="all">ทั้งหมด</div>
+      <div class="chip" data-abn="abnormal">เฉพาะผิดปกติ</div>
+      <div class="chip" data-abn="stopped">เฉพาะไม่ได้เดินเครื่อง</div>
+    </div>
+    <button class="export-btn-full" id="waterExportBtn">📤 Export Excel</button>
+    <div id="waterHistoryList"><div class="loading-text">กำลังโหลด...</div></div>
+  </div>
+
+  <!-- ========== WATER MODULE: แอดมิน ========== -->
+  <div class="view" id="view-water-admin">
+    <div class="pin-gate" id="waterPinGate">
+      <div class="pin-icon">🔒</div>
+      <div class="pin-title">สำหรับแอดมินเท่านั้น</div>
+      <div class="pin-sub">กรอกรหัส PIN เพื่อเข้าใช้งาน</div>
+      <input type="password" inputmode="numeric" maxlength="6" class="pin-input" id="waterPinInput" placeholder="••••">
+      <div class="pin-error" id="waterPinError"></div>
+    </div>
+
+    <div id="waterAdminContent" style="display:none;">
+      <div class="lock-bar">
+        <span>🔓 เข้าสู่ระบบแอดมินแล้ว</span>
+        <button id="waterLockBtn">ล็อก</button>
+      </div>
+
+      <div class="section-title">💧 สถานะแท็งก์น้ำเย็น (Realtime)</div>
+      <div id="waterTankStatusWrap"></div>
+
+      <div class="section-title">📈 กราฟกำลังการผลิตแต่ละระบบ</div>
+      <div class="std-editor-card" style="margin-bottom:16px;">
+        <div class="two-col">
+          <div class="field"><label>จากวันที่</label><input type="date" id="waterChartFromDate"></div>
+          <div class="field"><label>ถึงวันที่</label><input type="date" id="waterChartToDate"></div>
+        </div>
+        <button class="save-std-btn" id="waterChartGenerateBtn">📈 สร้างกราฟ</button>
+      </div>
+      <div id="waterChartResultWrap" style="display:none; margin-bottom:20px;">
+        <div style="overflow-x:auto; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; box-shadow:var(--shadow);">
+          <canvas id="waterTrendChart" height="300"></canvas>
+        </div>
+        <button class="export-btn-full" id="waterChartDownloadBtn" style="margin-top:12px;">💾 บันทึกภาพกราฟ (PNG ความละเอียดสูง)</button>
+      </div>
+    </div>
+  </div>
 </div>
 
-<nav class="bottom">
+<nav class="bottom" id="bottomNav" style="display:none;">
   <div class="navwrap">
-    <button class="navbtn active" data-view="view-log"><span class="ic">📝</span>บันทึกค่า</button>
-    <button class="navbtn" data-view="view-history"><span class="ic">📋</span>ประวัติ</button>
-    <button class="navbtn" data-view="view-admin"><span class="ic">🔐</span>แอดมิน</button>
+    <button class="navbtn module-btn module-compressor active" data-view="view-log"><span class="ic">📝</span>บันทึกค่า</button>
+    <button class="navbtn module-btn module-compressor" data-view="view-history"><span class="ic">📋</span>ประวัติ</button>
+    <button class="navbtn module-btn module-compressor" data-view="view-admin"><span class="ic">🔐</span>แอดมิน</button>
+    <button class="navbtn module-btn module-water" data-view="view-water-log" style="display:none;"><span class="ic">📝</span>บันทึกค่า</button>
+    <button class="navbtn module-btn module-water" data-view="view-water-history" style="display:none;"><span class="ic">📋</span>ประวัติ</button>
+    <button class="navbtn module-btn module-water" data-view="view-water-admin" style="display:none;"><span class="ic">🔐</span>แอดมิน</button>
   </div>
 </nav>
 
@@ -596,6 +732,15 @@ let readings = [];
 let employees = [];
 let selectedCompressor = null;
 let selectedEmployee = null;
+let selectedWaterEmployee = null;
+let selectedWaterSystem = null;
+let isWaterStopped = false;
+let waterSystems = [];
+let waterSystemsById = {};
+let waterTanks = [];
+let waterTanksById = {};
+let waterReadings = [];
+let waterModuleLoaded = false;
 
 // Supabase เป็นบริการที่ทำงานตลอดเวลา (ไม่มี cold start เหมือน Apps Script) จึงไม่ค่อยล้มเหลวแบบสุ่ม
 // แต่ยังคง retry เบาๆ ไว้เผื่อเน็ตของผู้ใช้หลุดชั่วขณะ (ความล้มเหลวระดับเครือข่ายเท่านั้น ไม่ retry error จากตัวคำสั่งเอง)
@@ -687,24 +832,36 @@ function loadEmployees() {
 function empLabel(e) { return e.emp_code + ' — ' + e.emp_name; }
 
 function populateEmployeeSelect() {
-  const sel = document.getElementById('empSelect');
   const savedCode = localStorage.getItem('emp_code') || '';
-  sel.innerHTML = '<option value="">-- เลือกพนักงาน --</option>';
-  employees.filter(isActiveEmployee).forEach(e => {
-    const opt = document.createElement('option');
-    opt.value = e.id;
-    opt.textContent = empLabel(e);
-    sel.appendChild(opt);
+  ['empSelect', 'waterEmpSelect'].forEach(selId => {
+    const sel = document.getElementById(selId);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">-- เลือกพนักงาน --</option>';
+    employees.filter(isActiveEmployee).forEach(e => {
+      const opt = document.createElement('option');
+      opt.value = e.id;
+      opt.textContent = empLabel(e);
+      sel.appendChild(opt);
+    });
+    if (savedCode) {
+      const match = employees.find(e => String(e.emp_code) === savedCode && isActiveEmployee(e));
+      if (match) {
+        sel.value = match.id;
+        if (selId === 'empSelect') selectedEmployee = match;
+        else selectedWaterEmployee = match;
+      }
+    }
   });
-  if (savedCode) {
-    const match = employees.find(e => String(e.emp_code) === savedCode && isActiveEmployee(e));
-    if (match) { sel.value = match.id; selectedEmployee = match; }
-  }
 }
 
 document.getElementById('empSelect').addEventListener('change', function() {
   selectedEmployee = employees.find(e => String(e.id) === String(this.value)) || null;
   if (selectedEmployee) localStorage.setItem('emp_code', selectedEmployee.emp_code);
+});
+
+document.getElementById('waterEmpSelect').addEventListener('change', function() {
+  selectedWaterEmployee = employees.find(e => String(e.id) === String(this.value)) || null;
+  if (selectedWaterEmployee) localStorage.setItem('emp_code', selectedWaterEmployee.emp_code);
 });
 
 /* ================= TAB 1: ฟอร์มบันทึกค่า ================= */
@@ -2315,14 +2472,47 @@ document.getElementById('addEmpBtn').addEventListener('click', function() {
   }).catch(err => { this.disabled=false; this.textContent='+ เพิ่มพนักงาน'; alert('เชื่อมต่อไม่ได้: '+(err.message||err)); });
 });
 
+/* ================= สลับโมดูล (Compressor / น้ำเย็น) ================= */
+let currentModule = 'compressor';
+
+function showView(viewId) {
+  document.querySelectorAll('.navbtn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById(viewId).classList.add('active');
+  const navBtn = document.querySelector('.navbtn[data-view="' + viewId + '"]');
+  if (navBtn) navBtn.classList.add('active');
+  if (viewId === 'view-admin') showAdminState();
+  if (viewId === 'view-water-admin') showWaterAdminState();
+}
+
+function setModule(mod) {
+  currentModule = mod;
+  localStorage.setItem('current_module', mod);
+  document.querySelectorAll('.module-btn').forEach(b => {
+    b.style.display = b.classList.contains('module-' + mod) ? 'flex' : 'none';
+  });
+  document.getElementById('bottomNav').style.display = 'flex';
+  document.getElementById('appTitle').textContent = mod === 'water' ? '💧 รายงานผลผลิตน้ำเย็น' : '🌀 บันทึกค่า Compressor';
+  showView(mod === 'water' ? 'view-water-log' : 'view-log');
+  if (mod === 'water') initWaterModule();
+}
+
+document.querySelectorAll('.module-card[data-module]').forEach(card => {
+  card.addEventListener('click', () => setModule(card.dataset.module));
+});
+
+document.getElementById('homeBtn').addEventListener('click', () => {
+  document.getElementById('bottomNav').style.display = 'none';
+  document.querySelectorAll('.navbtn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-home').classList.add('active');
+  document.getElementById('appTitle').textContent = '🌀 บันทึกค่า Compressor';
+});
+
 /* ================= การนำทาง (bottom nav) ================= */
 document.querySelectorAll('.navbtn').forEach(btn => {
   btn.addEventListener('click', function() {
-    document.querySelectorAll('.navbtn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-    this.classList.add('active');
-    document.getElementById(this.dataset.view).classList.add('active');
-    if (this.dataset.view === 'view-admin') showAdminState();
+    showView(this.dataset.view);
   });
 });
 
@@ -2371,6 +2561,599 @@ document.getElementById('saveSettings').addEventListener('click', () => {
 });
 
 /* ================= เริ่มต้นระบบ ================= */
+/* ================================================================
+ * MODULE: รายงานผลผลิตน้ำเย็น (Cold Water Production)
+ * ================================================================ */
+function loadWaterSystems() {
+  return withRetry(() => getSbClient().from('cold_water_tanks').select('*').order('id')).then(({ data, error }) => {
+    if (error) throw new Error(error.message);
+    waterTanks = data || [];
+    waterTanksById = {};
+    waterTanks.forEach(t => { waterTanksById[t.id] = t; });
+    return withRetry(() => getSbClient().from('cold_water_systems').select('*').order('sort_order'));
+  }).then(({ data, error }) => {
+    if (error) throw new Error(error.message);
+    waterSystems = data || [];
+    waterSystemsById = {};
+    waterSystems.forEach(s => { waterSystemsById[s.id] = s; });
+    populateWaterSystemSelects();
+  });
+}
+
+function populateWaterSystemSelects() {
+  const selects = [document.getElementById('waterSystemSelect'), document.getElementById('waterHistSystemFilter')];
+  selects.forEach(sel => {
+    if (!sel) return;
+    const keepFirst = sel.options[0];
+    sel.innerHTML = '';
+    sel.appendChild(keepFirst);
+    waterSystems.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      const tank = waterTanksById[s.tank_id];
+      opt.textContent = s.name + (tank ? (' — ' + tank.name) : '');
+      sel.appendChild(opt);
+    });
+  });
+}
+
+function initWaterModule() {
+  if (!waterModuleLoaded) {
+    waterModuleLoaded = true;
+    loadWaterSystems().then(() => loadWaterReadings({})).catch(() => {});
+    const today = new Date(); const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
+    const pad = n => String(n).padStart(2,'0');
+    const fmt = d => d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+    document.getElementById('waterChartToDate').value = fmt(today);
+    document.getElementById('waterChartFromDate').value = fmt(weekAgo);
+  } else {
+    renderWaterHistory();
+  }
+}
+
+/* ---------- ฟอร์มบันทึกค่า ---------- */
+document.getElementById('waterSystemSelect').addEventListener('change', function() {
+  selectedWaterSystem = waterSystemsById[this.value] || null;
+  isWaterStopped = false;
+  updateWaterStopToggleUI();
+  renderWaterSystemInfo();
+  renderWaterParamFields();
+});
+
+function renderWaterSystemInfo() {
+  const wrap = document.getElementById('waterSystemInfo');
+  if (!selectedWaterSystem) { wrap.style.display = 'none'; return; }
+  const s = selectedWaterSystem;
+  const tank = waterTanksById[s.tank_id];
+  wrap.style.display = 'block';
+  wrap.innerHTML =
+    '<b>' + escapeHtml(s.name) + '</b><br>' +
+    'ป้อนจาก: ' + escapeHtml(s.feed_compressor_label || '-') + '<br>' +
+    'กำลังผลิตสูงสุด: ' + (s.max_capacity_qhr || '-') + ' Q/hr · แท็งก์: ' + (tank ? escapeHtml(tank.name) + ' (ความจุ ' + tank.capacity_q + ' Q)' : '-') +
+    (s.requires_precool ? '<div class="compound-badge">⚠ ระบบนี้ต้องกรอกอุณหภูมิน้ำ Precool ด้วย</div>' : '');
+}
+
+function updateWaterStopToggleUI() {
+  const btn = document.getElementById('waterStopBtn');
+  const notice = document.getElementById('waterStoppedNotice');
+  const title = document.getElementById('waterParamSectionTitle');
+  const fields = document.getElementById('waterParamFields');
+  btn.style.display = selectedWaterSystem ? 'block' : 'none';
+  btn.classList.toggle('active', isWaterStopped);
+  btn.textContent = isWaterStopped ? '✅ ทำเครื่องหมายว่าไม่ได้เดินเครื่อง (กดเพื่อยกเลิก)' : '⏸ ระบบนี้ไม่ได้เดินเครื่อง (ไม่ต้องกรอกค่า)';
+  notice.style.display = isWaterStopped ? 'block' : 'none';
+  title.style.display = isWaterStopped ? 'none' : 'block';
+  fields.style.display = isWaterStopped ? 'none' : 'block';
+}
+document.getElementById('waterStopBtn').addEventListener('click', function() {
+  isWaterStopped = !isWaterStopped;
+  updateWaterStopToggleUI();
+});
+
+const WATER_NUMERIC_FIELDS = [
+  { key:'water_meter', label:'เลขมิเตอร์น้ำ', unit:'' },
+  { key:'production_rate_qhr', label:'กำลังการผลิต ณ เวลานั้น', unit:'Q/hr' },
+  { key:'pump_pressure_bar', label:'แรงดันปั๊มน้ำเย็นไปหาผู้ใช้งาน', unit:'Bar' },
+  { key:'temp_in', label:'อุณหภูมิน้ำเข้า', unit:'°C' },
+  { key:'temp_out', label:'อุณหภูมิน้ำออก', unit:'°C' },
+  { key:'temp_pipe_mouth', label:'อุณหภูมิปากท่อ', unit:'°C' }
+];
+
+function renderWaterParamFields() {
+  const wrap = document.getElementById('waterParamFields');
+  wrap.innerHTML = '';
+  const s = selectedWaterSystem;
+  if (!s) return;
+
+  // เลขมิเตอร์น้ำ + กำลังการผลิต
+  ['water_meter', 'production_rate_qhr'].forEach(key => {
+    const def = WATER_NUMERIC_FIELDS.find(f => f.key === key);
+    const div = document.createElement('div');
+    div.className = 'field';
+    div.innerHTML = '<label>' + def.label + (def.unit ? ' (' + def.unit + ')' : '') + '</label>' +
+      '<input type="number" step="0.01" data-field="' + def.key + '">';
+    wrap.appendChild(div);
+  });
+
+  // ปริมาณน้ำในแทงก์ — widget ภาพ
+  const tank = waterTanksById[s.tank_id];
+  wrap.appendChild(buildTankLevelWidget(tank));
+
+  // แรงดันปั๊ม / อุณหภูมิเข้า
+  ['pump_pressure_bar', 'temp_in'].forEach(key => {
+    const def = WATER_NUMERIC_FIELDS.find(f => f.key === key);
+    const div = document.createElement('div');
+    div.className = 'field';
+    div.innerHTML = '<label>' + def.label + (def.unit ? ' (' + def.unit + ')' : '') + '</label>' +
+      '<input type="number" step="0.01" data-field="' + def.key + '">';
+    wrap.appendChild(div);
+  });
+
+  // อุณหภูมิ Precool — เฉพาะระบบที่ต้องการ
+  if (s.requires_precool) {
+    const div = document.createElement('div');
+    div.className = 'field';
+    div.innerHTML = '<label>อุณหภูมิน้ำ Precool (°C)</label><input type="number" step="0.01" data-field="temp_precool">';
+    wrap.appendChild(div);
+  }
+
+  // อุณหภูมิออก / ปากท่อ
+  ['temp_out', 'temp_pipe_mouth'].forEach(key => {
+    const def = WATER_NUMERIC_FIELDS.find(f => f.key === key);
+    const div = document.createElement('div');
+    div.className = 'field';
+    div.innerHTML = '<label>' + def.label + (def.unit ? ' (' + def.unit + ')' : '') + '</label>' +
+      '<input type="number" step="0.01" data-field="' + def.key + '">';
+    wrap.appendChild(div);
+  });
+
+  // สภาพรูจ่าย
+  const scaleDiv = document.createElement('div');
+  scaleDiv.className = 'field';
+  scaleDiv.innerHTML = '<label>สภาพรูจ่าย</label>' +
+    '<select data-field="scale_condition">' +
+      '<option value="ไม่มีตะกรัน">ไม่มีตะกรัน</option>' +
+      '<option value="มีตะกรัน">มีตะกรัน</option>' +
+    '</select>';
+  wrap.appendChild(scaleDiv);
+
+  // สถานะปั๊ม Overflow + รายละเอียดถ้าผิดปกติ
+  const overflowDiv = document.createElement('div');
+  overflowDiv.className = 'field';
+  overflowDiv.innerHTML = '<label>สถานะการเดินปั๊ม Overflow</label>' +
+    '<select data-field="overflow_status" id="waterOverflowStatus">' +
+      '<option value="ปกติ">ปกติ</option>' +
+      '<option value="ผิดปกติ">ผิดปกติ</option>' +
+    '</select>';
+  wrap.appendChild(overflowDiv);
+
+  const overflowDetailDiv = document.createElement('div');
+  overflowDetailDiv.className = 'field';
+  overflowDetailDiv.id = 'waterOverflowDetailWrap';
+  overflowDetailDiv.style.display = 'none';
+  overflowDetailDiv.innerHTML = '<label>รายละเอียดความผิดปกติของปั๊ม Overflow</label>' +
+    '<textarea data-field="overflow_detail" placeholder="ระบุอาการที่พบ"></textarea>';
+  wrap.appendChild(overflowDetailDiv);
+
+  document.getElementById('waterOverflowStatus').addEventListener('change', function() {
+    document.getElementById('waterOverflowDetailWrap').style.display = this.value === 'ผิดปกติ' ? 'block' : 'none';
+  });
+}
+
+/* ---------- widget ภาพแสดงปริมาณน้ำในแทงก์ (คล้าย oil glass แต่เป็นทรงแทงก์แนวตั้ง) ---------- */
+function buildTankLevelWidget(tank) {
+  const capacity = (tank && tank.capacity_q) ? Number(tank.capacity_q) : 200;
+  const half = Math.round(capacity / 2);
+  const wrapDiv = document.createElement('div');
+  wrapDiv.className = 'oilglass-block';
+  wrapDiv.innerHTML =
+    '<div class="oilglass-label">🪣 ปริมาณน้ำในแทงก์ (Q) — ความจุ ' + capacity + ' Q' + (tank ? (' · ' + escapeHtml(tank.name)) : '') + '</div>' +
+    '<div class="oilglass-row">' +
+      '<div class="tanklvl-svgwrap">' +
+        '<svg viewBox="0 0 100 130">' +
+          '<rect class="tanklvl-outline" x="15" y="8" width="70" height="114" rx="10"/>' +
+          '<clipPath id="tankclip-' + Math.random().toString(36).slice(2,8) + '"><rect x="15" y="8" width="70" height="114" rx="10"/></clipPath>' +
+        '</svg>' +
+      '</div>' +
+      '<div class="oilglass-controls">' +
+        '<input type="range" min="0" max="' + capacity + '" step="1" value="' + half + '" class="oilglass-slider tanklvl-slider" data-field="tank_level_q">' +
+        '<div class="oilglass-presets">' +
+          '<button type="button" class="oilglass-preset-btn" data-val="0">ว่าง</button>' +
+          '<button type="button" class="oilglass-preset-btn" data-val="' + Math.round(capacity*0.25) + '">25%</button>' +
+          '<button type="button" class="oilglass-preset-btn selected" data-val="' + half + '">50%</button>' +
+          '<button type="button" class="oilglass-preset-btn" data-val="' + Math.round(capacity*0.75) + '">75%</button>' +
+          '<button type="button" class="oilglass-preset-btn" data-val="' + capacity + '">เต็ม</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  // สร้าง SVG fill + label ด้วย DOM API เพื่อกัน id ชนกันเวลามีหลาย widget ในหน้าเดียว (แม้ปกติจะมีแค่ 1 อันต่อครั้ง)
+  const svgWrap = wrapDiv.querySelector('.tanklvl-svgwrap');
+  const uid = 'tc' + Math.random().toString(36).slice(2,8);
+  svgWrap.innerHTML =
+    '<svg viewBox="0 0 100 130">' +
+      '<rect class="tanklvl-outline" x="15" y="8" width="70" height="114" rx="10"/>' +
+      '<clipPath id="' + uid + '"><rect x="15" y="8" width="70" height="114" rx="10"/></clipPath>' +
+      '<g clip-path="url(#' + uid + ')">' +
+        '<rect class="tanklvl-fill" data-el="fill" x="15" y="122" width="70" height="0"/>' +
+        '<line class="tanklvl-meniscus" data-el="meniscus" x1="15" x2="85" y1="122" y2="122"/>' +
+      '</g>' +
+      '<rect class="tanklvl-ring" x="15" y="8" width="70" height="114" rx="10"/>' +
+    '</svg>' +
+    '<div class="oilglass-pct" data-el="pctlabel">' + half + ' Q</div>';
+
+  const slider = wrapDiv.querySelector('.tanklvl-slider');
+  const presetBtns = wrapDiv.querySelectorAll('.oilglass-preset-btn');
+
+  function applyLevel(val) {
+    slider.value = val;
+    updateTankLevelVisual(wrapDiv, val, capacity);
+    presetBtns.forEach(b => b.classList.toggle('selected', Number(b.dataset.val) === val));
+  }
+  slider.addEventListener('input', function() { applyLevel(Number(this.value)); });
+  presetBtns.forEach(btn => btn.addEventListener('click', () => applyLevel(Number(btn.dataset.val))));
+
+  updateTankLevelVisual(wrapDiv, half, capacity);
+  return wrapDiv;
+}
+
+function updateTankLevelVisual(wrapDiv, val, capacity) {
+  const fillEl = wrapDiv.querySelector('[data-el="fill"]');
+  const meniscusEl = wrapDiv.querySelector('[data-el="meniscus"]');
+  const pctLabel = wrapDiv.querySelector('[data-el="pctlabel"]');
+  const pct = capacity > 0 ? (val / capacity) : 0;
+  const tankH = 114; // ความสูงของทรงแทงก์ใน viewBox
+  const fillH = tankH * pct;
+  const y = 8 + (tankH - fillH);
+  fillEl.setAttribute('y', y);
+  fillEl.setAttribute('height', fillH);
+  meniscusEl.setAttribute('y1', y);
+  meniscusEl.setAttribute('y2', y);
+  pctLabel.textContent = val + ' Q';
+}
+
+/* ---------- บันทึกข้อมูล (submit) ---------- */
+let isSubmittingWaterReading = false;
+
+function handleWaterSaveSuccess(row, recovered) {
+  const box = document.getElementById('waterLogSuccess');
+  const prefix = recovered ? '✅ บันทึกสำเร็จแล้ว (พบว่าบันทึกไปแล้วจากการลองส่งซ้ำครั้งก่อน)' : null;
+  const kind = getWaterReadingKind(row);
+  if (kind === 'stopped') box.innerHTML = '<div class="success-banner">' + (prefix || '✅ บันทึกสำเร็จ') + ' — บันทึกว่าระบบไม่ได้เดินเครื่อง</div>';
+  else if (kind === 'abnormal') box.innerHTML = '<div class="success-banner abn">⚠ ' + (prefix || 'บันทึกสำเร็จ') + ' — พบความผิดปกติที่ปั๊ม Overflow!</div>';
+  else if (kind === 'note') box.innerHTML = '<div class="success-banner">' + (prefix || '✅ บันทึกสำเร็จ') + ' — บันทึกหมายเหตุไว้แล้ว</div>';
+  else box.innerHTML = '<div class="success-banner">' + (prefix || '✅ บันทึกสำเร็จ') + ' — ค่าทั้งหมดอยู่ในเกณฑ์ปกติ</div>';
+
+  document.querySelectorAll('#waterParamFields input, #waterParamFields select, #waterParamFields textarea').forEach(el => {
+    if (el.tagName === 'SELECT') el.selectedIndex = 0; else el.value = '';
+  });
+  document.getElementById('waterNoteField').value = '';
+  document.getElementById('waterSystemSelect').value = '';
+  selectedWaterSystem = null;
+  isWaterStopped = false;
+  updateWaterStopToggleUI();
+  renderWaterSystemInfo(); renderWaterParamFields();
+  loadWaterReadings({});
+  setTimeout(() => { box.innerHTML=''; }, 7000);
+}
+
+document.getElementById('waterSubmitBtn').addEventListener('click', function() {
+  if (isSubmittingWaterReading) return;
+  if (!selectedWaterEmployee) { alert('กรุณาเลือกชื่อพนักงาน'); return; }
+  if (!selectedWaterSystem) { alert('กรุณาเลือกระบบ'); return; }
+
+  localStorage.setItem('emp_code', selectedWaterEmployee.emp_code);
+  const s = selectedWaterSystem;
+  const tank = waterTanksById[s.tank_id];
+
+  const row = {
+    system_id: s.id,
+    system_name: s.name,
+    tank_id: s.tank_id,
+    tank_name: tank ? tank.name : null,
+    employee_name: selectedWaterEmployee.emp_name,
+    employee_code: selectedWaterEmployee.emp_code,
+    note: document.getElementById('waterNoteField').value.trim(),
+    is_stopped: isWaterStopped,
+    client_request_id: 'wreq_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10)
+  };
+
+  if (!isWaterStopped) {
+    document.querySelectorAll('#waterParamFields [data-field]').forEach(el => {
+      const key = el.dataset.field;
+      if (el.tagName === 'SELECT') {
+        row[key] = el.value;
+      } else if (el.tagName === 'TEXTAREA') {
+        if (el.value.trim() !== '') row[key] = el.value.trim();
+      } else if (el.value !== '' && !isNaN(Number(el.value))) {
+        row[key] = Number(el.value);
+      }
+    });
+  }
+
+  const btn = this;
+  isSubmittingWaterReading = true;
+  btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+
+  withRetry(() => getSbClient().from('cold_water_readings').insert([row]).select().single())
+    .then(({ data, error }) => {
+      if (!error) return { savedRow: data, recovered: false };
+      if (error.code === '23505') {
+        return getSbClient().from('cold_water_readings').select('*').eq('client_request_id', row.client_request_id).single()
+          .then(({ data: existing, error: err2 }) => {
+            if (err2) throw new Error(err2.message);
+            return { savedRow: existing, recovered: true };
+          });
+      }
+      throw new Error(error.message);
+    })
+    .then(({ savedRow, recovered }) => {
+      isSubmittingWaterReading = false;
+      btn.disabled = false; btn.textContent = 'บันทึกข้อมูล';
+      handleWaterSaveSuccess(savedRow, recovered);
+    })
+    .catch(err => {
+      isSubmittingWaterReading = false;
+      btn.disabled = false; btn.textContent = 'บันทึกข้อมูล';
+      alert('เชื่อมต่อไม่ได้: ' + (err.message || err) + '\n\nยังไม่ได้บันทึกข้อมูล กรุณาลองกดบันทึกใหม่อีกครั้งได้เลย ไม่ซ้ำแน่นอน');
+    });
+});
+
+/* ---------- สถานะของ reading น้ำเย็น (คล้ายระบบ Compressor) ---------- */
+function getWaterReadingKind(r) {
+  if (r.is_stopped) return 'stopped';
+  if (r.overflow_status === 'ผิดปกติ') return 'abnormal';
+  const hasNote = !!(r.note && String(r.note).trim());
+  const hasScale = r.scale_condition === 'มีตะกรัน';
+  if (hasNote || hasScale) return 'note';
+  return 'normal';
+}
+
+function renderWaterReadingCard(r) {
+  const kind = getWaterReadingKind(r);
+  const cardClass = kind === 'abnormal' ? ' abnormal' : (kind === 'stopped' ? ' stopped' : '');
+  let badgeHtml;
+  if (kind === 'stopped') badgeHtml = '<div class="stopped-badge">⏸ ไม่ได้เดินเครื่อง</div>';
+  else if (kind === 'abnormal') badgeHtml = '<div class="abn-badge">⚠ ปั๊ม Overflow ผิดปกติ</div>';
+  else if (kind === 'note') badgeHtml = '<div class="note-badge">📝 มีหมายเหตุ</div>';
+  else badgeHtml = '<div class="ok-badge">✔ ปกติ</div>';
+
+  const vals = [];
+  if (r.water_meter !== null && r.water_meter !== undefined) vals.push(['เลขมิเตอร์น้ำ', r.water_meter]);
+  if (r.production_rate_qhr !== null && r.production_rate_qhr !== undefined) vals.push(['กำลังผลิต', r.production_rate_qhr + ' Q/hr']);
+  if (r.tank_level_q !== null && r.tank_level_q !== undefined) vals.push(['ปริมาณน้ำในแทงก์', r.tank_level_q + ' Q']);
+  if (r.pump_pressure_bar !== null && r.pump_pressure_bar !== undefined) vals.push(['แรงดันปั๊ม', r.pump_pressure_bar + ' Bar']);
+  if (r.temp_in !== null && r.temp_in !== undefined) vals.push(['อุณหภูมิน้ำเข้า', r.temp_in + ' °C']);
+  if (r.temp_precool !== null && r.temp_precool !== undefined) vals.push(['อุณหภูมิ Precool', r.temp_precool + ' °C']);
+  if (r.temp_out !== null && r.temp_out !== undefined) vals.push(['อุณหภูมิน้ำออก', r.temp_out + ' °C']);
+  if (r.temp_pipe_mouth !== null && r.temp_pipe_mouth !== undefined) vals.push(['อุณหภูมิปากท่อ', r.temp_pipe_mouth + ' °C']);
+  if (r.scale_condition) vals.push(['สภาพรูจ่าย', r.scale_condition]);
+
+  return '<div class="reading-card' + cardClass + '">' +
+    '<div class="reading-top">' +
+      '<div><div class="reading-comp">' + escapeHtml(r.system_name||'') + '</div><div class="reading-area">' + escapeHtml(r.tank_name||'') + '</div></div>' +
+      '<div class="reading-time">' + fmtDate(r.timestamp) + '</div>' +
+    '</div>' +
+    badgeHtml +
+    '<div class="reading-emp">👤 ' + escapeHtml(r.employee_name||'') + ' (' + escapeHtml(r.employee_code||'') + ')</div>' +
+    (kind !== 'stopped' ? '<div class="reading-vals">' + vals.map(v => '<div class="k">'+v[0]+'</div><div class="v">'+v[1]+'</div>').join('') + '</div>' : '') +
+    (r.overflow_status === 'ผิดปกติ' && r.overflow_detail ? '<div class="reading-abn-list">Overflow: ' + escapeHtml(r.overflow_detail) + '</div>' : '') +
+    (r.note ? '<div class="reading-note">📝 ' + escapeHtml(r.note) + '</div>' : '') +
+  '</div>';
+}
+
+/* ---------- ประวัติ ---------- */
+let waterHistFilter = 'all';
+
+function loadWaterReadings(opts) {
+  opts = opts || {};
+  const buildQuery = () => {
+    let q = getSbClient().from('cold_water_readings').select('*').order('timestamp', { ascending: false });
+    if (opts.all) {
+      q = q.limit(20000);
+    } else {
+      const d = new Date(); d.setDate(d.getDate() - 30);
+      q = q.gte('timestamp', d.toISOString());
+    }
+    return q;
+  };
+  return withRetry(buildQuery).then(({ data, error }) => {
+    if (error) throw new Error(error.message);
+    waterReadings = Array.isArray(data) ? data : [];
+    renderWaterHistory();
+    return { readings: waterReadings };
+  });
+}
+
+function getFilteredWaterHistoryItems() {
+  const sysFilter = document.getElementById('waterHistSystemFilter').value;
+  let items = waterReadings.slice();
+  if (sysFilter) items = items.filter(r => String(r.system_id) === String(sysFilter));
+  if (waterHistFilter === 'abnormal') items = items.filter(r => getWaterReadingKind(r) === 'abnormal');
+  else if (waterHistFilter === 'stopped') items = items.filter(r => getWaterReadingKind(r) === 'stopped');
+  return items;
+}
+
+function renderWaterHistory() {
+  const list = document.getElementById('waterHistoryList');
+  const items = getFilteredWaterHistoryItems();
+  if (!items.length) { list.innerHTML = '<div class="empty-state">ไม่พบข้อมูลในช่วงที่เลือก</div>'; return; }
+  list.innerHTML = items.slice(0, 200).map(renderWaterReadingCard).join('');
+}
+
+document.getElementById('waterHistSystemFilter').addEventListener('change', renderWaterHistory);
+document.getElementById('waterHistRangeFilter').addEventListener('change', function() {
+  if (this.value === 'all') loadWaterReadings({ all:true }); else loadWaterReadings({});
+});
+document.querySelectorAll('#view-water-history .chip').forEach(chip => {
+  chip.addEventListener('click', function() {
+    document.querySelectorAll('#view-water-history .chip').forEach(c => c.classList.remove('active'));
+    this.classList.add('active');
+    waterHistFilter = this.dataset.abn;
+    renderWaterHistory();
+  });
+});
+
+document.getElementById('waterExportBtn').addEventListener('click', function() {
+  const items = getFilteredWaterHistoryItems();
+  if (!items.length) { alert('ไม่มีข้อมูลให้ export ตามตัวกรองนี้'); return; }
+  const rows = items.map(r => ({
+    'วันที่-เวลา': fmtDate(r.timestamp),
+    'ระบบ': r.system_name,
+    'แท็งก์': r.tank_name,
+    'พนักงาน': r.employee_name,
+    'รหัสพนักงาน': r.employee_code,
+    'สถานะ': { stopped:'ไม่ได้เดินเครื่อง', abnormal:'ผิดปกติ', note:'มีหมายเหตุ', normal:'ปกติ' }[getWaterReadingKind(r)],
+    'เลขมิเตอร์น้ำ': r.water_meter,
+    'กำลังผลิต (Q/hr)': r.production_rate_qhr,
+    'ปริมาณน้ำในแทงก์ (Q)': r.tank_level_q,
+    'แรงดันปั๊ม (Bar)': r.pump_pressure_bar,
+    'อุณหภูมิน้ำเข้า (°C)': r.temp_in,
+    'อุณหภูมิ Precool (°C)': r.temp_precool,
+    'อุณหภูมิน้ำออก (°C)': r.temp_out,
+    'อุณหภูมิปากท่อ (°C)': r.temp_pipe_mouth,
+    'สภาพรูจ่าย': r.scale_condition,
+    'สถานะปั๊ม Overflow': r.overflow_status,
+    'รายละเอียด Overflow': r.overflow_detail,
+    'หมายเหตุ': r.note
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'น้ำเย็น');
+  XLSX.writeFile(wb, 'cold_water_log_' + new Date().toISOString().slice(0,10) + '.xlsx');
+});
+
+/* ---------- แอดมิน: PIN gate (ใช้ PIN เดียวกับโมดูล Compressor) ---------- */
+function showWaterAdminState() {
+  const gate = document.getElementById('waterPinGate');
+  const content = document.getElementById('waterAdminContent');
+  if (isAdminUnlocked()) { gate.style.display='none'; content.style.display='block'; renderWaterTankStatus(); }
+  else { gate.style.display='block'; content.style.display='none'; }
+}
+document.getElementById('waterPinInput').addEventListener('input', function() {
+  if (this.value.length >= ADMIN_PIN.length) {
+    if (this.value === ADMIN_PIN) {
+      sessionStorage.setItem('admin_unlocked','1');
+      document.getElementById('waterPinError').textContent='';
+      this.value='';
+      showWaterAdminState();
+    } else {
+      document.getElementById('waterPinError').textContent = 'รหัส PIN ไม่ถูกต้อง';
+      this.value='';
+    }
+  }
+});
+document.getElementById('waterLockBtn').addEventListener('click', function() {
+  sessionStorage.removeItem('admin_unlocked');
+  showWaterAdminState();
+});
+
+/* ---------- แอดมิน: สถานะแท็งก์แบบ Realtime ---------- */
+function renderWaterTankStatus() {
+  const wrap = document.getElementById('waterTankStatusWrap');
+  wrap.innerHTML = '<div class="loading-text">กำลังโหลด...</div>';
+  withRetry(() => getSbClient().from('cold_water_readings').select('*').order('timestamp', { ascending:false }).limit(500))
+    .then(({ data, error }) => {
+      if (error) throw new Error(error.message);
+      const recent = data || [];
+      wrap.innerHTML = waterTanks.map(tank => {
+        const latest = recent.find(r => String(r.tank_id) === String(tank.id) && r.tank_level_q !== null && r.tank_level_q !== undefined);
+        const level = latest ? latest.tank_level_q : null;
+        const pct = level !== null ? Math.round((level / tank.capacity_q) * 100) : null;
+        const timeStr = latest ? fmtDate(latest.timestamp) : 'ยังไม่มีข้อมูล';
+        const barColor = pct === null ? 'var(--muted)' : (pct < 20 ? 'var(--red)' : (pct < 50 ? '#B8863A' : 'var(--green)'));
+        return '<div class="std-editor-card" style="margin-bottom:12px;">' +
+          '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">' +
+            '<div style="font-weight:800; font-size:14px;">🪣 ' + escapeHtml(tank.name) + '</div>' +
+            '<div style="font-size:11px; color:var(--muted);">อัปเดตล่าสุด: ' + timeStr + '</div>' +
+          '</div>' +
+          '<div style="display:flex; align-items:center; gap:12px;">' +
+            '<div style="flex:1; height:22px; background:var(--panel2); border-radius:20px; overflow:hidden; border:1px solid var(--border);">' +
+              '<div style="height:100%; width:' + (pct||0) + '%; background:' + barColor + '; transition:width 0.3s;"></div>' +
+            '</div>' +
+            '<div style="font-weight:800; font-size:15px; min-width:70px; text-align:right;">' + (level!==null ? (level + ' / ' + tank.capacity_q + ' Q') : '-') + '</div>' +
+          '</div>' +
+          (pct !== null ? '<div style="font-size:11px; color:var(--muted); margin-top:4px;">' + pct + '% ของความจุ</div>' : '') +
+        '</div>';
+      }).join('');
+    }).catch(err => { wrap.innerHTML = '<div class="empty-state">เชื่อมต่อไม่ได้: ' + escapeHtml(err.message||String(err)) + '</div>'; });
+}
+
+/* ---------- แอดมิน: กราฟกำลังการผลิต ---------- */
+let waterTrendChartInstance = null;
+
+document.getElementById('waterChartGenerateBtn').addEventListener('click', function() {
+  const fromDateStr = document.getElementById('waterChartFromDate').value;
+  const toDateStr = document.getElementById('waterChartToDate').value;
+  if (!fromDateStr || !toDateStr) { alert('กรุณาเลือกช่วงวันที่'); return; }
+  const fromDT = new Date(fromDateStr + 'T00:00:00');
+  const toDT = new Date(toDateStr + 'T23:59:59');
+
+  const btn = this;
+  const originalText = btn.textContent;
+  btn.disabled = true; btn.textContent = 'กำลังโหลดข้อมูล...';
+
+  withRetry(() => getSbClient().from('cold_water_readings').select('timestamp,system_id,production_rate_qhr')
+    .gte('timestamp', fromDT.toISOString()).lte('timestamp', toDT.toISOString())
+    .order('timestamp', { ascending: true })
+  ).then(({ data, error }) => {
+    btn.disabled = false; btn.textContent = originalText;
+    if (error) { alert('เกิดข้อผิดพลาด: ' + error.message); return; }
+    if (!data || !data.length) { alert('ไม่พบข้อมูลในช่วงวันที่เลือก'); return; }
+    renderWaterTrendChart(data);
+  }).catch(err => { btn.disabled=false; btn.textContent=originalText; alert('เชื่อมต่อไม่ได้: '+(err.message||err)); });
+});
+
+function renderWaterTrendChart(rows) {
+  const timestamps = Array.from(new Set(rows.map(r => r.timestamp))).sort();
+  const labels = timestamps.map(t => fmtDate(t));
+
+  const datasets = waterSystems.map((s, i) => {
+    const bySystem = {};
+    rows.filter(r => String(r.system_id) === String(s.id)).forEach(r => { bySystem[r.timestamp] = r.production_rate_qhr; });
+    return {
+      label: s.name,
+      data: timestamps.map(t => bySystem.hasOwnProperty(t) ? Number(bySystem[t]) : null),
+      borderColor: CHART_COLORS[i % CHART_COLORS.length],
+      backgroundColor: CHART_COLORS[i % CHART_COLORS.length],
+      tension: 0.25, spanGaps: true, pointRadius: 3, pointHoverRadius: 5, borderWidth: 2
+    };
+  });
+
+  const ctx = document.getElementById('waterTrendChart').getContext('2d');
+  if (waterTrendChartInstance) waterTrendChartInstance.destroy();
+  waterTrendChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      devicePixelRatio: 3,
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        title: { display:true, text:'กำลังการผลิตน้ำเย็นแต่ละระบบ (Q/hr)', font:{size:15,weight:'bold'}, padding:{bottom:12} },
+        legend: { position:'bottom', labels:{font:{size:10.5}, boxWidth:14} },
+        datalabels: { display: rows.length <= 60, align:'top', anchor:'end', font:{size:9,weight:'600'}, color:'#333', formatter: v => (v===null||v===undefined)?'':v }
+      },
+      scales: {
+        x: { ticks:{font:{size:9.5}, maxRotation:60, minRotation:40}, title:{display:true, text:'เวลา'} },
+        y: { type:'linear', title:{display:true, text:'Q/hr', font:{size:12,weight:'bold'}} }
+      }
+    },
+    plugins: [ChartDataLabels]
+  });
+  document.getElementById('waterChartResultWrap').style.display = 'block';
+  document.getElementById('waterChartResultWrap').scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+document.getElementById('waterChartDownloadBtn').addEventListener('click', () => {
+  if (!waterTrendChartInstance) return;
+  const url = waterTrendChartInstance.toBase64Image('image/png', 1);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'water_trend_' + new Date().toISOString().slice(0,10) + '.png';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+});
+
 function init() {
   if (!checkConfigured()) return;
   setSyncStatus(true, 'กำลังโหลดข้อมูล...');
