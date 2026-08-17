@@ -36,6 +36,21 @@
   body.pc-mode .two-col { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
   body.pc-mode nav.bottom .navwrap { max-width:1180px; }
 
+  /* PC mode: จัดสมดุลแทนการยืดเต็มความกว้างดิบๆ — ฟอร์มคุมความกว้างพอดี จัดกลาง, รายการ์ดจัดเป็นกริดหลายคอลัมน์ */
+  body.pc-mode #view-home,
+  body.pc-mode #view-log,
+  body.pc-mode #view-water-log { max-width:640px; margin-left:auto; margin-right:auto; }
+  body.pc-mode #view-history,
+  body.pc-mode #view-water-history { max-width:980px; margin-left:auto; margin-right:auto; }
+  body.pc-mode #historyList,
+  body.pc-mode #waterHistoryList { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:12px; align-items:start; }
+  body.pc-mode #historyList .reading-card,
+  body.pc-mode #waterHistoryList .reading-card { margin-bottom:0; }
+  body.pc-mode .filter-bar,
+  body.pc-mode .chip-row,
+  body.pc-mode .export-btn-full { max-width:980px; margin-left:auto; margin-right:auto; }
+  body.pc-mode .export-btn-full { display:block; }
+
   header { padding:16px 16px 12px; background:linear-gradient(135deg,var(--accent),var(--accent2)); border-bottom:1px solid var(--accent); position:sticky; top:0; z-index:40; box-shadow:var(--shadow); }
   header .row { display:flex; justify-content:space-between; align-items:center; gap:8px; }
   header h1 { margin:0; font-size:17px; color:#FFFFFF; }
@@ -126,12 +141,26 @@
   .lock-bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; font-size:13px; color:var(--green); }
   .lock-bar button { background:none; border:none; color:var(--muted); font-size:12.5px; text-decoration:underline; cursor:pointer; }
 
-  /* admin sub-tabs */
-  .subtabs { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; background:var(--panel2); border-radius:10px; padding:4px; }
-  .subtab { flex:1; min-width:30%; text-align:center; padding:9px 3px; border-radius:8px; font-size:10.5px; font-weight:700; color:var(--muted); cursor:pointer; line-height:1.3; }
-  .subtab.active { background:var(--accent); color:#FFFFFF; }
+  /* admin menu — เป็นปุ่มกดเรียงแนวตั้ง (มือถือ) / แถบด้านข้าง (PC mode) */
+  .admin-layout { display:block; }
+  .subtabs { display:flex; flex-direction:column; gap:8px; margin-bottom:18px; background:none; padding:0; }
+  .subtab {
+    display:flex; align-items:center; gap:10px; text-align:left;
+    padding:13px 16px; border-radius:12px; font-size:13px; font-weight:700;
+    color:var(--text); cursor:pointer; line-height:1.3;
+    background:var(--panel); border:1px solid var(--border); box-shadow:var(--shadow);
+    transition:background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  }
+  .subtab:active { transform:scale(0.99); }
+  .subtab.active { background:var(--accent); color:#FFFFFF; border-color:var(--accent); }
+  .admin-content-area { min-width:0; }
   .subview { display:none; }
   .subview.active { display:block; }
+
+  /* PC mode: เมนูแอดมินกลายเป็นแถบด้านข้างคงที่ ไม่ใช่ปุ่มเรียงเต็มความกว้างอีกต่อไป */
+  body.pc-mode .admin-layout { display:flex; align-items:flex-start; gap:24px; }
+  body.pc-mode .subtabs { flex:0 0 230px; position:sticky; top:14px; margin-bottom:0; }
+  body.pc-mode .admin-content-area { flex:1; min-width:0; }
 
   .daily-summary-card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px; text-align:center; box-shadow:var(--shadow); }
   .daily-summary-num { font-size:34px; font-weight:800; color:var(--red); }
@@ -431,18 +460,20 @@
         </div>
       </div>
 
+      <div class="admin-layout">
       <div class="subtabs">
-        <div class="subtab active" data-sub="daily">รายงานประจำวัน</div>
-        <div class="subtab" data-sub="all-abn">ความผิดปกติทั้งหมด</div>
-        <div class="subtab" data-sub="std">ตั้งค่ามาตรฐาน</div>
-        <div class="subtab" data-sub="bulk">ตั้งค่าหลายเครื่อง</div>
-        <div class="subtab" data-sub="sheet">ตารางค่ามาตรฐาน</div>
-        <div class="subtab" data-sub="rounds">รอบตรวจเช็ค</div>
-        <div class="subtab" data-sub="chart">กราฟแนวโน้ม</div>
-        <div class="subtab" data-sub="emp">จัดการพนักงาน</div>
+        <div class="subtab active" data-sub="daily">📊 รายงานประจำวัน</div>
+        <div class="subtab" data-sub="all-abn">⚠️ ความผิดปกติทั้งหมด</div>
+        <div class="subtab" data-sub="std">🎚️ ตั้งค่ามาตรฐาน</div>
+        <div class="subtab" data-sub="bulk">🧰 ตั้งค่าหลายเครื่อง</div>
+        <div class="subtab" data-sub="sheet">🗂️ ตารางค่ามาตรฐาน</div>
+        <div class="subtab" data-sub="rounds">⏱️ รอบตรวจเช็ค</div>
+        <div class="subtab" data-sub="chart">📈 กราฟแนวโน้ม</div>
+        <div class="subtab" data-sub="emp">👥 จัดการพนักงาน</div>
         <div class="subtab" data-sub="water-tank">💧 แท็งก์น้ำเย็น</div>
         <div class="subtab" data-sub="water-chart">💧 กราฟผลผลิตน้ำ</div>
       </div>
+      <div class="admin-content-area">
 
       <div class="subview active" id="sub-daily">
         <div class="daily-summary-card">
@@ -512,6 +543,12 @@
       </div>
 
       <div class="subview" id="sub-rounds">
+        <div class="chip-row" style="margin-bottom:14px;">
+          <div class="chip active" data-roundsrc="compressor">🌀 Compressor</div>
+          <div class="chip" data-roundsrc="water">💧 น้ำเย็น</div>
+        </div>
+
+        <div id="roundsCompressorSettingsWrap">
         <button type="button" class="emp-btn" id="roundsTrackSettingsToggle" style="width:100%; margin-bottom:10px;">⚙ ตั้งค่าเครื่องที่นับในแดชบอร์ด</button>
         <div class="std-editor-card" id="roundsTrackSettingsPanel" style="display:none; margin-bottom:16px;">
           <div style="font-size:11.5px; color:var(--muted); margin-bottom:10px;">ติ๊กเฉพาะเครื่องที่ต้องการให้นับในหน้านี้และแถบสถานะหน้าจดบันทึก — เครื่องที่ไม่ติ๊กจะไม่ถูกนับเป็น "ไม่ได้จด/ล่าช้า" เลย</div>
@@ -521,6 +558,7 @@
           </div>
           <div id="roundsTrackCompList" style="max-height:260px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; padding:8px; margin-bottom:12px;"></div>
           <button class="save-std-btn" id="roundsTrackSaveBtn">💾 บันทึกการตั้งค่านี้</button>
+        </div>
         </div>
 
         <div class="filter-bar">
@@ -607,12 +645,20 @@
           <button class="export-btn-full" id="waterChartDownloadBtn" style="margin-top:12px;">💾 บันทึกภาพกราฟ (PNG ความละเอียดสูง)</button>
         </div>
       </div>
+      </div>
+      </div>
     </div>
   </div>
 
 <!-- ========== WATER MODULE: บันทึกค่า ========== -->
 <div class="view" id="view-water-log">
   <div id="waterLogSuccess"></div>
+
+  <div class="tech-status-card" id="waterTechStatusCard">
+    <div class="tech-status-header">📊 สถานะการจดน้ำเย็นวันนี้ <span id="waterTechStatusRefreshedAt" style="font-weight:400; color:var(--muted); font-size:10.5px;"></span></div>
+    <div id="waterTechStatusShifts" class="loading-text" style="padding:14px;">กำลังโหลด...</div>
+    <div id="waterTechLateListWrap"></div>
+  </div>
 
   <div class="section-title">ข้อมูลผู้กรอก</div>
   <div class="field">
@@ -1881,13 +1927,14 @@ function getWorkingDayAnchorDateStr(now) {
 }
 
 // เทียบเวลาจริงของ compressor หนึ่งเครื่อง กับรอบที่กำหนด แล้วคืนสถานะ
-function computeRoundStatus(compressorId, roundDateTime, now, readingsList) {
+function computeRoundStatus(entityId, roundDateTime, now, readingsList, idField) {
+  idField = idField || 'compressor_id';
   const graceMs = ON_TIME_GRACE_MINUTES * 60000;
   const windowStart = new Date(roundDateTime.getTime() - graceMs);
   const nextRoundDateTime = new Date(roundDateTime.getTime() + 3 * 3600000);
 
   const candidates = readingsList
-    .filter(r => String(r.compressor_id) === String(compressorId))
+    .filter(r => String(r[idField]) === String(entityId))
     .map(r => ({ r, t: new Date(r.timestamp) }))
     .filter(x => x.t >= windowStart && x.t < nextRoundDateTime)
     .sort((a, b) => a.t - b.t);
@@ -1980,6 +2027,8 @@ document.getElementById('roundsTrackSaveBtn').addEventListener('click', function
   }).catch(err => { btn.disabled = false; btn.textContent = originalText; alert('เชื่อมต่อไม่ได้: ' + (err.message||err)); });
 });
 
+let roundsSource = 'compressor';
+
 function renderRoundsTab() {
   const dateInput = document.getElementById('roundsDateInput');
   const shiftSelect = document.getElementById('roundsShiftSelect');
@@ -1987,6 +2036,7 @@ function renderRoundsTab() {
   if (!shiftSelect.dataset.userSet) shiftSelect.value = getCurrentShiftGuess(new Date());
 
   const doRender = () => {
+    if (roundsSource === 'water') { doRenderWaterRounds(); return; }
     const dateStr = dateInput.value || todayDateStr();
     const shift = shiftSelect.value;
     const now = new Date();
@@ -2066,8 +2116,93 @@ function renderRoundsTab() {
   dateInput.onchange = doRender;
   shiftSelect.onchange = function() { this.dataset.userSet = '1'; doRender(); };
 
+  document.querySelectorAll('#sub-rounds .chip[data-roundsrc]').forEach(chip => {
+    chip.onclick = function() {
+      document.querySelectorAll('#sub-rounds .chip[data-roundsrc]').forEach(c => c.classList.remove('active'));
+      this.classList.add('active');
+      roundsSource = this.dataset.roundsrc;
+      document.getElementById('roundsCompressorSettingsWrap').style.display = roundsSource === 'compressor' ? 'block' : 'none';
+      doRender();
+    };
+  });
+
   // โหลดตารางรอบจากฐานข้อมูลก่อน (เผื่อยังไม่เคยโหลด) แล้วค่อย render
   loadShiftRounds().then(doRender).catch(doRender);
+}
+
+function doRenderWaterRounds() {
+  const dateInput = document.getElementById('roundsDateInput');
+  const shiftSelect = document.getElementById('roundsShiftSelect');
+  const dateStr = dateInput.value || todayDateStr();
+  const shift = shiftSelect.value;
+  const now = new Date();
+  const roundDateTimes = getShiftRoundDateTimes(dateStr, shift);
+  const roundHours = ROUND_HOURS_BY_SHIFT[shift] || [];
+
+  document.getElementById('roundsMatrixWrap').innerHTML = '<div class="loading-text">กำลังโหลด...</div>';
+
+  const rangeStart = new Date(dateStr + 'T00:00:00'); rangeStart.setHours(-1,0,0,0);
+  const rangeEnd = new Date(dateStr + 'T00:00:00'); rangeEnd.setDate(rangeEnd.getDate() + 2);
+
+  initWaterModule().then(() => withRetry(() => getSbClient().from('cold_water_readings').select('id,system_id,timestamp')
+    .gte('timestamp', rangeStart.toISOString()).lt('timestamp', rangeEnd.toISOString())
+  )).then(({ data, error }) => {
+    if (error) throw new Error(error.message);
+    const scopedReadings = data || [];
+
+    let ontimeCount = 0, lateCount = 0, missedCount = 0, pendingCount = 0;
+    const lateMinutesList = [];
+    const tankGroups = {}; // tankName -> [{sys, cells}]
+
+    waterSystems.forEach(s => {
+      const cells = roundDateTimes.map((rdt, i) => {
+        const res = computeRoundStatus(s.id, rdt, now, scopedReadings, 'system_id');
+        if (res.status === 'ontime') { ontimeCount++; lateMinutesList.push(res.lateMin); }
+        else if (res.status === 'late') { lateCount++; lateMinutesList.push(res.lateMin); }
+        else if (res.status === 'missed') missedCount++;
+        else pendingCount++;
+        return { status: res.status, lateMin: res.lateMin, hour: roundHours[i] };
+      });
+      const tank = waterTanksById[s.tank_id];
+      const tankName = tank ? tank.name : 'ไม่ระบุแท็งก์';
+      if (!tankGroups[tankName]) tankGroups[tankName] = [];
+      tankGroups[tankName].push({ sys: s, cells });
+    });
+
+    const dueCount = ontimeCount + lateCount + missedCount;
+    const completionPct = dueCount > 0 ? Math.round(((ontimeCount + lateCount) / dueCount) * 100) : 0;
+    const avgLate = lateCount > 0 ? Math.round(lateMinutesList.filter(m => m > 0).reduce((a,b)=>a+b,0) / Math.max(1, lateCount)) : 0;
+
+    document.getElementById('roundsCompletionPct').textContent = completionPct + '%';
+    document.getElementById('roundsCompletionPct').className = 'daily-summary-num' + (completionPct >= 100 ? ' zero' : '');
+    document.getElementById('roundsMissedCount').textContent = missedCount;
+    document.getElementById('roundsAvgLate').textContent = avgLate;
+
+    const tankNames = Object.keys(tankGroups).sort((a,b) => {
+      const missedA = tankGroups[a].reduce((n,m) => n + m.cells.filter(x=>x.status==='missed').length, 0);
+      const missedB = tankGroups[b].reduce((n,m) => n + m.cells.filter(x=>x.status==='missed').length, 0);
+      return missedB - missedA;
+    });
+
+    const wrap = document.getElementById('roundsMatrixWrap');
+    wrap.innerHTML = tankNames.map(tankName => {
+      const items = tankGroups[tankName];
+      const tankMissed = items.reduce((n,m) => n + m.cells.filter(x=>x.status==='missed').length, 0);
+      const rowsHtml = items.map(item => {
+        const cellsHtml = item.cells.map(cell => roundBadgeHtml(cell.status, cell.lateMin, cell.hour)).join('');
+        return '<div class="rounds-machine-row">' +
+          '<div class="rounds-machine-name">' + escapeHtml(item.sys.name) + '</div>' +
+          cellsHtml +
+        '</div>';
+      }).join('');
+      return '<div class="rounds-zone-group">' +
+        '<div class="rounds-zone-header">🪣 ' + escapeHtml(tankName) + (tankMissed > 0 ? ' <span style="color:var(--red);">— ไม่ได้จด ' + tankMissed + ' รอบ</span>' : ' <span style="color:var(--green);">✔ ครบ</span>') + '</div>' +
+        rowsHtml +
+      '</div>';
+    }).join('');
+  }).catch(err => {
+    document.getElementById('roundsMatrixWrap').innerHTML = '<div class="empty-state">เชื่อมต่อไม่ได้: ' + escapeHtml(err.message||String(err)) + '</div>';
+  });
 }
 
 /* ================= แถบสถานะการจดเครื่องวันนี้ (หน้าบันทึกค่า ให้ทุกคนเห็น ไม่ใช่แค่แอดมิน) =================
@@ -2137,6 +2272,78 @@ function renderTechStatusBar() {
     document.getElementById('techStatusRefreshedAt').textContent = '· อัปเดตล่าสุด ' + now.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' });
   }).catch(() => {
     document.getElementById('techStatusShifts').innerHTML = '<div class="empty-state" style="padding:10px;">โหลดสถานะไม่สำเร็จ</div>';
+  });
+}
+
+/* ================= แถบสถานะการจดน้ำเย็นวันนี้ (หน้าบันทึกค่าน้ำเย็น) — เหมือนของ Compressor ทุกประการ ================= */
+function renderWaterTechStatusBar() {
+  const shiftsEl = document.getElementById('waterTechStatusShifts');
+  const lateWrap = document.getElementById('waterTechLateListWrap');
+  const refreshedEl = document.getElementById('waterTechStatusRefreshedAt');
+  if (!shiftsEl) return; // ยังไม่เคยเปิดโมดูลน้ำเย็น element ยังไม่ถูก render
+
+  initWaterModule().then(() => {
+    const now = new Date();
+    const workingDayStr = getWorkingDayAnchorDateStr(now);
+    const currentShift = getCurrentShiftGuess(now);
+
+    const rangeStart = new Date(workingDayStr + 'T00:00:00'); rangeStart.setHours(-1, 0, 0, 0);
+    const rangeEnd = new Date(workingDayStr + 'T00:00:00'); rangeEnd.setDate(rangeEnd.getDate() + 3);
+
+    return withRetry(() => getSbClient().from('cold_water_readings').select('id,system_id,timestamp')
+      .gte('timestamp', rangeStart.toISOString()).lt('timestamp', rangeEnd.toISOString())
+    ).then(({ data, error }) => {
+      if (error) throw new Error(error.message);
+      const scopedReadings = data || [];
+
+      const shiftSummaries = {};
+      const lateItems = [];
+
+      ['A', 'B', 'C'].forEach(shift => {
+        const roundDateTimes = getShiftRoundDateTimes(workingDayStr, shift);
+        const roundHours = ROUND_HOURS_BY_SHIFT[shift] || [];
+        let ontime = 0, late = 0, missed = 0;
+        waterSystems.forEach(s => {
+          roundDateTimes.forEach((rdt, i) => {
+            const res = computeRoundStatus(s.id, rdt, now, scopedReadings, 'system_id');
+            if (res.status === 'ontime') ontime++;
+            else if (res.status === 'late') { late++; lateItems.push({ sys:s, shift, hour:roundHours[i], lateMin:res.lateMin }); }
+            else if (res.status === 'missed') missed++;
+          });
+        });
+        shiftSummaries[shift] = { ontime, late, missed };
+      });
+
+      const shiftLabel = { A:'กะ A', B:'กะ B', C:'กะ C' };
+      shiftsEl.innerHTML = ['A','B','C'].map(shift => {
+        const s = shiftSummaries[shift];
+        const isCurrent = shift === currentShift;
+        return '<div class="tech-status-shift-row">' +
+          '<div class="tech-status-shift-name">' + shiftLabel[shift] + (isCurrent ? ' 🔸' : '') + '</div>' +
+          '<div class="tech-status-chip ok' + (isCurrent ? ' current' : '') + '">✔ ' + s.ontime + '</div>' +
+          '<div class="tech-status-chip late">🟡 ' + s.late + '</div>' +
+          '<div class="tech-status-chip missed">🔴 ' + s.missed + '</div>' +
+        '</div>';
+      }).join('');
+
+      lateItems.sort((a, b) => b.lateMin - a.lateMin);
+      if (lateItems.length) {
+        lateWrap.innerHTML = '<div class="tech-late-list">' +
+          '<div class="tech-late-title">⚠ ระบบที่ล่าช้าอยู่ตอนนี้ (' + lateItems.length + ' รายการ)</div>' +
+          lateItems.slice(0, 8).map(item => {
+            const hh = String(item.hour).padStart(2,'0') + ':00';
+            return '<div class="tech-late-item"><span>' + escapeHtml(item.sys.name) + ' — ' + shiftLabel[item.shift] + ' รอบ ' + hh + '</span><span class="tli-late">ช้า ' + item.lateMin + ' นาที</span></div>';
+          }).join('') +
+          (lateItems.length > 8 ? '<div style="font-size:11px; color:var(--muted); margin-top:4px;">และอีก ' + (lateItems.length - 8) + ' รายการ</div>' : '') +
+        '</div>';
+      } else {
+        lateWrap.innerHTML = '';
+      }
+
+      refreshedEl.textContent = '· อัปเดตล่าสุด ' + now.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' });
+    });
+  }).catch(() => {
+    shiftsEl.innerHTML = '<div class="empty-state" style="padding:10px;">โหลดสถานะไม่สำเร็จ</div>';
   });
 }
 
@@ -2487,7 +2694,7 @@ function setModule(mod, pushState) {
   document.getElementById('bottomNav').style.display = 'flex';
   document.getElementById('appTitle').textContent = mod === 'water' ? '💧 รายงานผลผลิตน้ำเย็น' : '🌀 บันทึกค่า Compressor';
   showView(mod === 'water' ? 'view-water-log' : 'view-log');
-  if (mod === 'water') initWaterModule();
+  if (mod === 'water') { initWaterModule(); renderWaterTechStatusBar(); }
   // บันทึกไว้ใน browser history เพื่อให้กดปุ่ม "ย้อนกลับ" ของเบราว์เซอร์/มือถือ กลับมาหน้าแรกได้เลย ไม่ต้องกดปุ่ม 🏠 อย่างเดียว
   if (pushState !== false) history.pushState({ page: 'module', module: mod }, '', '#' + mod);
 }
@@ -2861,6 +3068,7 @@ function handleWaterSaveSuccess(row, recovered) {
   updateWaterStopToggleUI();
   renderWaterSystemInfo(); renderWaterParamFields();
   loadWaterReadings({});
+  renderWaterTechStatusBar();
   setTimeout(() => { box.innerHTML=''; }, 7000);
 }
 
@@ -3325,6 +3533,7 @@ init();
 // จะได้เห็นผลอัตโนมัติโดยไม่ต้อง reload หน้าเว็บเอง (ไม่มีตัวโหลดให้เห็น ไม่รบกวนการใช้งาน)
 setInterval(() => {
   loadCompressors().then(() => { renderHistory(); renderTechStatusBar(); }).catch(() => { /* เงียบไว้ ไม่รบกวนผู้ใช้ */ });
+  if (waterModuleLoaded) renderWaterTechStatusBar();
 }, 5 * 60 * 1000);
 </script>
 </body>
