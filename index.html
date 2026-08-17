@@ -464,9 +464,6 @@
       <div class="subtabs">
         <div class="subtab active" data-sub="daily">📊 รายงานประจำวัน</div>
         <div class="subtab" data-sub="all-abn">⚠️ ความผิดปกติทั้งหมด</div>
-        <div class="subtab" data-sub="std">🎚️ ตั้งค่ามาตรฐาน</div>
-        <div class="subtab" data-sub="bulk">🧰 ตั้งค่าหลายเครื่อง</div>
-        <div class="subtab" data-sub="sheet">🗂️ ตารางค่ามาตรฐาน</div>
         <div class="subtab" data-sub="rounds">⏱️ รอบตรวจเช็ค</div>
         <div class="subtab" data-sub="chart">📈 กราฟแนวโน้ม</div>
         <div class="subtab" data-sub="emp">👥 จัดการพนักงาน</div>
@@ -493,53 +490,6 @@
           </select>
         </div>
         <div id="allAbnList"></div>
-      </div>
-
-      <div class="subview" id="sub-std">
-        <div class="field">
-          <label>เลือกเครื่องที่ต้องการตั้งค่ามาตรฐาน</label>
-          <select id="stdCompSelect"><option value="">-- เลือกเครื่อง --</option></select>
-        </div>
-        <div id="stdEditorWrap"></div>
-      </div>
-
-      <div class="subview" id="sub-bulk">
-        <div class="std-editor-card" style="margin-bottom:16px;">
-          <div class="std-label" style="font-weight:700; margin-bottom:10px; color:var(--text);">1) เลือกเครื่อง</div>
-          <div class="two-col" style="margin-bottom:10px; grid-template-columns: 1fr auto;">
-            <select id="bulkZoneFilter" style="padding:9px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
-              <option value="">-- เลือกทั้งหมดตามโซน --</option>
-            </select>
-            <button class="emp-btn" id="bulkZoneApplyBtn" style="white-space:nowrap;">เลือกตามโซนนี้</button>
-          </div>
-          <div style="display:flex; gap:8px; margin-bottom:10px;">
-            <button class="emp-btn" id="bulkSelectAllBtn" style="flex:1;">เลือกทั้งหมด</button>
-            <button class="emp-btn" id="bulkSelectNoneBtn" style="flex:1;">ยกเลิกทั้งหมด</button>
-          </div>
-          <div id="bulkCompList" style="max-height:260px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; padding:8px;"></div>
-          <div id="bulkSelectedCount" style="margin-top:8px; font-size:12.5px; color:var(--muted);">เลือกไว้ 0 เครื่อง</div>
-        </div>
-
-        <div class="std-editor-card">
-          <div class="std-label" style="font-weight:700; margin-bottom:4px; color:var(--text);">2) ติ๊กเฉพาะค่าที่ต้องการตั้ง แล้วกรอกค่า</div>
-          <div style="font-size:11.5px; color:var(--muted); margin-bottom:12px;">ค่าที่ไม่ติ๊ก จะไม่ถูกแก้ไข (เครื่องที่เลือกไว้จะคงค่าเดิมของช่องนั้นๆ)</div>
-          <div id="bulkFieldsWrap"></div>
-          <button class="save-std-btn" id="bulkApplyBtn">✅ ใช้ค่านี้กับเครื่องที่เลือก</button>
-        </div>
-      </div>
-
-      <div class="subview" id="sub-sheet">
-        <div style="font-size:11.5px; color:var(--muted); margin-bottom:12px; line-height:1.6;">
-          แก้ค่าตรงในตารางได้เลย (เหมือน Excel/Google Sheets) — กด 📋 ที่แถวต้นทาง แล้วติ๊กแถวปลายทางในคอลัมน์ซ้ายสุด แล้วกด "วางค่า" เพื่อคัดลอกทั้งแถว การเปลี่ยนแปลงจะยังไม่บันทึกจนกว่าจะกด "บันทึกทั้งหมด" ด้านล่าง
-        </div>
-        <div style="display:flex; gap:8px; margin-bottom:10px; align-items:center;">
-          <div id="sheetCopySourceLabel" style="flex:1; font-size:12.5px; color:var(--muted);">ยังไม่ได้เลือกแถวต้นทาง</div>
-          <button class="emp-btn" id="sheetPasteBtn" disabled>📥 วางค่า</button>
-        </div>
-        <div class="sheet-scroll-wrap">
-          <table id="sheetTable"></table>
-        </div>
-        <button class="save-std-btn" id="sheetSaveAllBtn" style="margin-top:14px;">💾 บันทึกทั้งหมด</button>
       </div>
 
       <div class="subview" id="sub-rounds">
@@ -704,6 +654,77 @@
   </div>
   <button class="export-btn-full" id="waterExportBtn">📤 Export Excel</button>
   <div id="waterHistoryList"><div class="loading-text">กำลังโหลด...</div></div>
+</div>
+
+<!-- ========== ตั้งค่าระบบ (เปิดจากปุ่ม ⚙ มุมบนขวา) — รวม 3 เครื่องมือที่ย้ายมาจากเมนูแอดมิน ========== -->
+<div class="view" id="view-settings-tools">
+  <div class="pin-gate" id="toolsPinGate">
+    <div class="pin-icon">🔒</div>
+    <div class="pin-title">สำหรับแอดมินเท่านั้น</div>
+    <div class="pin-sub">กรอกรหัส PIN เพื่อเข้าใช้งาน</div>
+    <input type="password" inputmode="numeric" maxlength="6" class="pin-input" id="toolsPinInput" placeholder="••••">
+    <div class="pin-error" id="toolsPinError"></div>
+  </div>
+
+  <div id="toolsContent" style="display:none;">
+    <div class="lock-bar">
+      <button id="toolsBackBtn">← กลับ</button>
+      <button id="toolsAdvancedBtn" style="background:none; border:none; color:var(--muted); font-size:12.5px; text-decoration:underline; cursor:pointer;">⚙ การเชื่อมต่อฐานข้อมูล</button>
+    </div>
+
+    <div class="chip-row" style="margin-bottom:14px;">
+      <div class="chip active" data-tool="std">🎚️ ตั้งค่ามาตรฐาน</div>
+      <div class="chip" data-tool="bulk">🧰 ตั้งค่าหลายเครื่อง</div>
+      <div class="chip" data-tool="sheet">🗂️ ตารางค่ามาตรฐาน</div>
+    </div>
+
+    <div class="subview active" id="sub-std">
+      <div class="field">
+        <label>เลือกเครื่องที่ต้องการตั้งค่ามาตรฐาน</label>
+        <select id="stdCompSelect"><option value="">-- เลือกเครื่อง --</option></select>
+      </div>
+      <div id="stdEditorWrap"></div>
+    </div>
+
+    <div class="subview" id="sub-bulk">
+      <div class="std-editor-card" style="margin-bottom:16px;">
+        <div class="std-label" style="font-weight:700; margin-bottom:10px; color:var(--text);">1) เลือกเครื่อง</div>
+        <div class="two-col" style="margin-bottom:10px; grid-template-columns: 1fr auto;">
+          <select id="bulkZoneFilter" style="padding:9px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text);">
+            <option value="">-- เลือกทั้งหมดตามโซน --</option>
+          </select>
+          <button class="emp-btn" id="bulkZoneApplyBtn" style="white-space:nowrap;">เลือกตามโซนนี้</button>
+        </div>
+        <div style="display:flex; gap:8px; margin-bottom:10px;">
+          <button class="emp-btn" id="bulkSelectAllBtn" style="flex:1;">เลือกทั้งหมด</button>
+          <button class="emp-btn" id="bulkSelectNoneBtn" style="flex:1;">ยกเลิกทั้งหมด</button>
+        </div>
+        <div id="bulkCompList" style="max-height:260px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; padding:8px;"></div>
+        <div id="bulkSelectedCount" style="margin-top:8px; font-size:12.5px; color:var(--muted);">เลือกไว้ 0 เครื่อง</div>
+      </div>
+
+      <div class="std-editor-card">
+        <div class="std-label" style="font-weight:700; margin-bottom:4px; color:var(--text);">2) ติ๊กเฉพาะค่าที่ต้องการตั้ง แล้วกรอกค่า</div>
+        <div style="font-size:11.5px; color:var(--muted); margin-bottom:12px;">ค่าที่ไม่ติ๊ก จะไม่ถูกแก้ไข (เครื่องที่เลือกไว้จะคงค่าเดิมของช่องนั้นๆ)</div>
+        <div id="bulkFieldsWrap"></div>
+        <button class="save-std-btn" id="bulkApplyBtn">✅ ใช้ค่านี้กับเครื่องที่เลือก</button>
+      </div>
+    </div>
+
+    <div class="subview" id="sub-sheet">
+      <div style="font-size:11.5px; color:var(--muted); margin-bottom:12px; line-height:1.6;">
+        แก้ค่าตรงในตารางได้เลย (เหมือน Excel/Google Sheets) — กด 📋 ที่แถวต้นทาง แล้วติ๊กแถวปลายทางในคอลัมน์ซ้ายสุด แล้วกด "วางค่า" เพื่อคัดลอกทั้งแถว การเปลี่ยนแปลงจะยังไม่บันทึกจนกว่าจะกด "บันทึกทั้งหมด" ด้านล่าง
+      </div>
+      <div style="display:flex; gap:8px; margin-bottom:10px; align-items:center;">
+        <div id="sheetCopySourceLabel" style="flex:1; font-size:12.5px; color:var(--muted);">ยังไม่ได้เลือกแถวต้นทาง</div>
+        <button class="emp-btn" id="sheetPasteBtn" disabled>📥 วางค่า</button>
+      </div>
+      <div class="sheet-scroll-wrap">
+        <table id="sheetTable"></table>
+      </div>
+      <button class="save-std-btn" id="sheetSaveAllBtn" style="margin-top:14px;">💾 บันทึกทั้งหมด</button>
+    </div>
+  </div>
 </div>
 </div>
 
@@ -1497,17 +1518,15 @@ document.getElementById('refreshCacheBtn').addEventListener('click', function() 
   });
 });
 
-document.querySelectorAll('.subtab').forEach(tab => {
+document.querySelectorAll('.subtabs .subtab').forEach(tab => {
   tab.addEventListener('click', function() {
-    document.querySelectorAll('.subtab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.subview').forEach(v => v.classList.remove('active'));
+    document.querySelectorAll('.subtabs .subtab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.admin-content-area .subview').forEach(v => v.classList.remove('active'));
     this.classList.add('active');
     document.getElementById('sub-' + this.dataset.sub).classList.add('active');
     if (this.dataset.sub === 'daily') renderDailyReport();
     if (this.dataset.sub === 'all-abn') renderAllAbnormal();
     if (this.dataset.sub === 'emp') renderEmployeeList();
-    if (this.dataset.sub === 'bulk') renderBulkEditor();
-    if (this.dataset.sub === 'sheet') renderSheetEditor();
     if (this.dataset.sub === 'rounds') renderRoundsTab();
     if (this.dataset.sub === 'chart') initChartTab();
     if (this.dataset.sub === 'water-tank') initWaterModule().then(renderWaterTankStatus);
@@ -2683,6 +2702,7 @@ function showView(viewId) {
   const navBtn = document.querySelector('.navbtn[data-view="' + viewId + '"]');
   if (navBtn) navBtn.classList.add('active');
   if (viewId === 'view-admin') showAdminState();
+  if (viewId === 'view-settings-tools') showToolsState();
 }
 
 function setModule(mod, pushState) {
@@ -2718,6 +2738,7 @@ window.addEventListener('popstate', (e) => {
   const state = e.state;
   if (!state || state.page === 'home') goHome(false);
   else if (state.page === 'module') setModule(state.module, false);
+  else if (state.page === 'tools') showView('view-settings-tools');
 });
 history.replaceState({ page: 'home' }, '', '#home');
 
@@ -2745,10 +2766,47 @@ document.getElementById('displayModeToggleBtn').addEventListener('click', () => 
 applyDisplayMode();
 
 document.getElementById('settingsBtn').addEventListener('click', () => {
+  showView('view-settings-tools');
+  history.pushState({ page: 'tools' }, '', '#tools');
+});
+document.getElementById('toolsBackBtn').addEventListener('click', () => history.back());
+document.getElementById('toolsAdvancedBtn').addEventListener('click', () => {
   document.getElementById('urlInput').value = SUPABASE_URL === DEFAULT_SUPABASE_URL ? '' : SUPABASE_URL;
   document.getElementById('keyInput').value = SUPABASE_ANON_KEY === DEFAULT_SUPABASE_ANON_KEY ? '' : SUPABASE_ANON_KEY;
   settingsModal.classList.add('show');
 });
+
+function showToolsState() {
+  const gate = document.getElementById('toolsPinGate');
+  const content = document.getElementById('toolsContent');
+  if (isAdminUnlocked()) { gate.style.display = 'none'; content.style.display = 'block'; }
+  else { gate.style.display = 'block'; content.style.display = 'none'; }
+}
+document.getElementById('toolsPinInput').addEventListener('input', function() {
+  if (this.value.length >= ADMIN_PIN.length) {
+    if (this.value === ADMIN_PIN) {
+      sessionStorage.setItem('admin_unlocked', '1');
+      document.getElementById('toolsPinError').textContent = '';
+      this.value = '';
+      showToolsState();
+    } else {
+      document.getElementById('toolsPinError').textContent = 'รหัส PIN ไม่ถูกต้อง';
+      this.value = '';
+    }
+  }
+});
+
+document.querySelectorAll('#view-settings-tools .chip[data-tool]').forEach(chip => {
+  chip.addEventListener('click', function() {
+    document.querySelectorAll('#view-settings-tools .chip[data-tool]').forEach(c => c.classList.remove('active'));
+    this.classList.add('active');
+    document.querySelectorAll('#toolsContent .subview').forEach(v => v.classList.remove('active'));
+    document.getElementById('sub-' + this.dataset.tool).classList.add('active');
+    if (this.dataset.tool === 'bulk') renderBulkEditor();
+    if (this.dataset.tool === 'sheet') renderSheetEditor();
+  });
+});
+
 document.getElementById('cancelSettings').addEventListener('click', () => settingsModal.classList.remove('show'));
 document.getElementById('resetDefaultSettings').addEventListener('click', () => {
   localStorage.removeItem('supabase_url');
