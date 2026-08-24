@@ -38,7 +38,7 @@
 
   /* PC mode: จัดสมดุลแทนการยืดเต็มความกว้างดิบๆ — ฟอร์มคุมความกว้างพอดี จัดกลาง, รายการ์ดจัดเป็นกริดหลายคอลัมน์ */
   body.pc-mode #view-home,
-  body.pc-mode #view-dept-select,
+  body.pc-mode #view-site-modules,
   body.pc-mode #view-log,
   body.pc-mode #view-water-log { max-width:640px; margin-left:auto; margin-right:auto; }
   body.pc-mode #view-history,
@@ -359,7 +359,28 @@
 
   <!-- ========== หน้าแรก: เลือกโมดูล ========== -->
   <div class="view active" id="view-home">
-    <div class="section-title">เลือกโมดูลที่จะใช้งาน</div>
+    <div class="section-title">เลือกแผนก/สาขา</div>
+    <div class="module-card" data-dept="SFO">
+      <div class="module-card-icon">🏭</div>
+      <div class="module-card-body">
+        <div class="module-card-title">SFO</div>
+        <div class="module-card-desc">จดเครื่อง Compressor และรายงานผลผลิตน้ำเย็น</div>
+      </div>
+      <div class="module-card-arrow">›</div>
+    </div>
+    <div class="module-card" data-dept="SUNNY">
+      <div class="module-card-icon">☀️</div>
+      <div class="module-card-body">
+        <div class="module-card-title">Sunny</div>
+        <div class="module-card-desc">จดเครื่อง Compressor ฝั่ง Sunny</div>
+      </div>
+      <div class="module-card-arrow">›</div>
+    </div>
+  </div>
+
+  <!-- ========== เลือกโมดูลภายในแผนกที่เลือก (SFO เห็นทั้งจดเครื่อง+จดน้ำ, Sunny เห็นเฉพาะจดเครื่อง) ========== -->
+  <div class="view" id="view-site-modules">
+    <div class="section-title" id="siteModulesTitle">เลือกโมดูลที่จะใช้งาน</div>
     <div class="module-card" data-module="compressor">
       <div class="module-card-icon">🌀</div>
       <div class="module-card-body">
@@ -368,39 +389,11 @@
       </div>
       <div class="module-card-arrow">›</div>
     </div>
-    <div class="module-card" data-module="water">
+    <div class="module-card" data-module="water" id="waterModuleCard">
       <div class="module-card-icon">💧</div>
       <div class="module-card-body">
         <div class="module-card-title">รายงานผลผลิตน้ำเย็น</div>
         <div class="module-card-desc">บันทึกข้อมูลระบบ Ripple Plate 4 ระบบ และสถานะแท็งก์น้ำเย็น</div>
-      </div>
-      <div class="module-card-arrow">›</div>
-    </div>
-    <div class="module-card disabled">
-      <div class="module-card-icon">➕</div>
-      <div class="module-card-body">
-        <div class="module-card-title">โมดูลอื่นๆ</div>
-        <div class="module-card-desc">จะเพิ่มเติมในอนาคต</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ========== เลือกแผนก (SFO / SUNNY) ก่อนเข้าโมดูล Compressor ========== -->
-  <div class="view" id="view-dept-select">
-    <div class="section-title">เลือกแผนกที่จะจดเครื่อง</div>
-    <div class="module-card" data-dept="SFO">
-      <div class="module-card-icon">🏭</div>
-      <div class="module-card-body">
-        <div class="module-card-title">SFO</div>
-        <div class="module-card-desc">เครื่อง Compressor ฝั่ง SFO</div>
-      </div>
-      <div class="module-card-arrow">›</div>
-    </div>
-    <div class="module-card" data-dept="SUNNY">
-      <div class="module-card-icon">☀️</div>
-      <div class="module-card-body">
-        <div class="module-card-title">SUNNY</div>
-        <div class="module-card-desc">เครื่อง Compressor ฝั่ง Sunny</div>
       </div>
       <div class="module-card-arrow">›</div>
     </div>
@@ -2749,6 +2742,7 @@ document.getElementById('addEmpBtn').addEventListener('click', function() {
 
 /* ================= สลับโมดูล (Compressor / น้ำเย็น) ================= */
 let currentModule = 'compressor';
+let currentDepartment = localStorage.getItem('current_department') || null;
 
 function showView(viewId) {
   document.querySelectorAll('.navbtn').forEach(b => b.classList.remove('active'));
@@ -2758,40 +2752,43 @@ function showView(viewId) {
   if (navBtn) navBtn.classList.add('active');
   if (viewId === 'view-admin') showAdminState();
   if (viewId === 'view-settings-tools') showToolsState();
+  updateDeptBadge();
 }
-
-let currentDepartment = localStorage.getItem('current_department') || null;
 
 function updateDeptBadge() {
   const btn = document.getElementById('deptSwitchBtn');
-  if (currentModule === 'compressor' && currentDepartment) {
+  const hiddenViews = ['view-home', 'view-site-modules'];
+  const activeView = document.querySelector('.view.active');
+  const activeId = activeView ? activeView.id : '';
+  if (currentDepartment && hiddenViews.indexOf(activeId) === -1) {
     btn.style.display = 'inline-block';
-    btn.textContent = (currentDepartment === 'SUNNY' ? '☀️' : '🏭') + ' ' + currentDepartment + ' · เปลี่ยนแผนก';
+    btn.textContent = (currentDepartment === 'SUNNY' ? '☀️' : '🏭') + ' ' + currentDepartment + ' · เปลี่ยนโมดูล';
   } else {
     btn.style.display = 'none';
   }
 }
 
-function selectDepartment(dept) {
+// ---------- ระดับที่ 1: เลือกแผนก/สาขา (หน้าแรก) ----------
+function selectSite(dept, pushState) {
   currentDepartment = dept;
   localStorage.setItem('current_department', dept);
-  updateDeptBadge();
-  populateCompressorSelects();
-  populateEmployeeSelect();
-  selectedCompressor = null;
-  document.getElementById('compSelect').value = '';
-  renderCompInfo(); renderParamFields();
-  showView('view-log');
-  renderTechStatusBar();
-  history.pushState({ page: 'module', module: 'compressor' }, '', '#compressor');
+  document.getElementById('siteModulesTitle').textContent = dept + ' — เลือกโมดูลที่จะใช้งาน';
+  document.getElementById('waterModuleCard').style.display = dept === 'SFO' ? 'flex' : 'none';
+  document.getElementById('bottomNav').style.display = 'none';
+  document.querySelectorAll('.navbtn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-site-modules').classList.add('active');
+  document.getElementById('appTitle').textContent = dept + ' — เลือกโมดูล';
+  document.getElementById('deptSwitchBtn').style.display = 'none';
+  if (pushState !== false) history.pushState({ page: 'site', department: dept }, '', '#site-' + dept);
 }
-
-document.querySelectorAll('.module-card[data-dept]').forEach(card => {
-  card.addEventListener('click', () => selectDepartment(card.dataset.dept));
+document.querySelectorAll('#view-home .module-card[data-dept]').forEach(card => {
+  card.addEventListener('click', () => selectSite(card.dataset.dept, true));
 });
 
-document.getElementById('deptSwitchBtn').addEventListener('click', () => {
-  showView('view-dept-select');
+// ---------- ระดับที่ 2: เลือกโมดูลภายในแผนกที่เลือกไว้แล้ว ----------
+document.querySelectorAll('#view-site-modules .module-card[data-module]').forEach(card => {
+  card.addEventListener('click', () => setModule(card.dataset.module, true));
 });
 
 function setModule(mod, pushState) {
@@ -2801,27 +2798,27 @@ function setModule(mod, pushState) {
     b.style.display = b.classList.contains('module-' + mod) ? 'flex' : 'none';
   });
   document.getElementById('bottomNav').style.display = 'flex';
-  document.getElementById('appTitle').textContent = mod === 'water' ? '💧 รายงานผลผลิตน้ำเย็น' : '🌀 บันทึกค่า Compressor';
+  document.getElementById('appTitle').textContent = (currentDepartment ? currentDepartment + ' · ' : '') + (mod === 'water' ? '💧 รายงานผลผลิตน้ำเย็น' : '🌀 บันทึกค่า Compressor');
 
   if (mod === 'compressor') {
-    updateDeptBadge();
-    if (!currentDepartment) {
-      showView('view-dept-select');
-    } else {
-      showView('view-log');
-      renderTechStatusBar();
-    }
+    populateCompressorSelects();
+    populateEmployeeSelect();
+    selectedCompressor = null;
+    document.getElementById('compSelect').value = '';
+    renderCompInfo(); renderParamFields();
+    showView('view-log');
+    renderTechStatusBar();
   } else {
-    document.getElementById('deptSwitchBtn').style.display = 'none';
     showView('view-water-log');
     initWaterModule(); renderWaterTechStatusBar();
   }
-  // บันทึกไว้ใน browser history เพื่อให้กดปุ่ม "ย้อนกลับ" ของเบราว์เซอร์/มือถือ กลับมาหน้าแรกได้เลย ไม่ต้องกดปุ่ม 🏠 อย่างเดียว
-  if (pushState !== false) history.pushState({ page: 'module', module: mod }, '', '#' + mod);
+  updateDeptBadge();
+  // บันทึกไว้ใน browser history เพื่อให้กดปุ่ม "ย้อนกลับ" ของเบราว์เซอร์/มือถือ กลับมาหน้าที่ถูกต้องได้เลย ไม่ต้องกดปุ่ม 🏠 อย่างเดียว
+  if (pushState !== false) history.pushState({ page: 'module', module: mod, department: currentDepartment }, '', '#' + currentDepartment + '-' + mod);
 }
 
-document.querySelectorAll('.module-card[data-module]').forEach(card => {
-  card.addEventListener('click', () => setModule(card.dataset.module));
+document.getElementById('deptSwitchBtn').addEventListener('click', () => {
+  if (currentDepartment) selectSite(currentDepartment, true);
 });
 
 function goHome(pushState) {
@@ -2830,6 +2827,7 @@ function goHome(pushState) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-home').classList.add('active');
   document.getElementById('appTitle').textContent = '🌀 บันทึกค่า Compressor';
+  document.getElementById('deptSwitchBtn').style.display = 'none';
   if (pushState !== false) history.pushState({ page: 'home' }, '', '#home');
 }
 document.getElementById('homeBtn').addEventListener('click', () => goHome(true));
@@ -2838,7 +2836,8 @@ document.getElementById('homeBtn').addEventListener('click', () => goHome(true))
 window.addEventListener('popstate', (e) => {
   const state = e.state;
   if (!state || state.page === 'home') goHome(false);
-  else if (state.page === 'module') setModule(state.module, false);
+  else if (state.page === 'site') selectSite(state.department, false);
+  else if (state.page === 'module') { currentDepartment = state.department; setModule(state.module, false); }
   else if (state.page === 'tools') showView('view-settings-tools');
 });
 history.replaceState({ page: 'home' }, '', '#home');
@@ -2846,10 +2845,7 @@ history.replaceState({ page: 'home' }, '', '#home');
 /* ================= การนำทาง (bottom nav) ================= */
 document.querySelectorAll('.navbtn').forEach(btn => {
   btn.addEventListener('click', function() {
-    if (this.dataset.view === 'view-log' && !currentDepartment) {
-      showView('view-dept-select');
-      return;
-    }
+    if (!currentDepartment) { goHome(true); return; }
     showView(this.dataset.view);
   });
 });
