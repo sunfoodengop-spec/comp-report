@@ -9,6 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   :root {
     /* โทนสบายตา: ขาวนวล 60% / เลือดหมู 30% / เทาเข้ม 10% */
@@ -371,7 +372,7 @@
   .prod-hist-shift-badge.done { background:#E5F3EA; color:#2F6B45; border-color:rgba(47,107,69,0.3); }
   .prod-fill-warn { font-size:11.5px; color:var(--accent); background:var(--accent-soft); border-radius:8px; padding:8px 10px; margin:10px 0; display:none; }
 
-  /* ---------- Print template สำหรับพิมพ์/บันทึกเป็น PDF (ซ่อนไว้นอกจอปกติ, แสดงเฉพาะตอน @media print) ---------- */
+  /* ---------- Print template สำหรับ Export PDF (ซ่อนไว้นอกจอเสมอ ใช้แค่วัดขนาด + rasterize ผ่าน SVG foreignObject) ---------- */
   #prodPrintRoot { position:fixed; left:-99999px; top:0; width:1600px; background:#FFFFFF; padding:22px; font-family:"Segoe UI","Sarabun",Tahoma,sans-serif; color:#1A1A1A; }
   .pf-page { width:1556px; }
   .pf-headrow { display:flex; justify-content:space-between; align-items:flex-end; font-size:16px; font-weight:700; margin-bottom:4px; }
@@ -386,16 +387,6 @@
   .pf-sig .slot img { height:34px; }
   .pf-sig .slot .cap { font-size:10.5px; color:#444444; margin-top:2px; }
   .pf-footnote { font-size:11.5px; margin-top:10px; }
-
-  /* ---------- โหมดพิมพ์ (window.print) — ใช้เอนจิ้นเบราว์เซอร์จริงแทน html2canvas
-     เพราะ html2canvas วาดตัวอักษรทีละตัวแยกกัน ทำให้สระ/วรรณยุกต์ภาษาไทยเรียงผิดตำแหน่ง
-     (ปัญหารู้จักกันดีของ html2canvas กับสคริปต์ที่มีการประกอบอักษรซับซ้อน) ---------- */
-  @media print {
-    .app { display:none !important; }
-    #prodPrintRoot { position:static !important; left:0 !important; top:0 !important; width:auto !important; padding:0 !important; }
-    .pf-page { width:100% !important; }
-    @page { size: A4 landscape; margin: 8mm; }
-  }
 </style>
 </head>
 <body>
@@ -4344,7 +4335,7 @@ function renderProductionHistory() {
     return '<div class="prod-hist-card">' +
       '<div class="prod-hist-title">' + escapeHtml(form ? form.title : g.report_type) + ' — ' + fmtProdDateShort(g.report_date) + '</div>' +
       '<div class="prod-hist-shifts">' + shiftBadges + '</div>' +
-      '<button class="export-btn-full" data-pdf-type="' + g.report_type + '" data-pdf-date="' + g.report_date + '">🖨️ พิมพ์ / บันทึกเป็น PDF</button>' +
+      '<button class="export-btn-full" data-pdf-type="' + g.report_type + '" data-pdf-date="' + g.report_date + '">📄 Export PDF</button>' +
       '</div>';
   }).join('');
 
@@ -4362,12 +4353,55 @@ function fmtProdDateShort(dateStr) {
 }
 
 /* ================================================================
- * 8) พิมพ์ / บันทึกเป็น PDF — render "หน้ากระดาษ" เต็มรูปแบบ (รวม 3 กะ) ด้วย HTML จริง
- *    แล้วเรียก window.print() ของเบราว์เซอร์ (ไม่ใช้ html2canvas) เพราะ html2canvas
- *    วาดตัวอักษรทีละตัวทำให้สระ/วรรณยุกต์ภาษาไทยเรียงผิดตำแหน่ง — การใช้ print
- *    ของเบราว์เซอร์จริงทำให้ได้ตัวอักษรไทยถูกต้อง 100% และผู้ใช้เลือก "บันทึกเป็น PDF"
- *    จากหน้าต่างพิมพ์ได้เลยทั้งบนมือถือและ PC
+ * 8) Export PDF — render "หน้ากระดาษ" เต็มรูปแบบ (รวม 3 กะ) เป็นภาพเดียว
+ *    ผ่านเทคนิค SVG <foreignObject> แล้ววาดลง <canvas> ก่อนฝังใน jsPDF
+ *    (ไม่ใช้ html2canvas เพราะมันวาดตัวอักษรทีละตัวเอง ทำให้สระ/วรรณยุกต์
+ *    ภาษาไทยเรียงผิดตำแหน่ง — เทคนิค foreignObject ให้เบราว์เซอร์เป็นคน
+ *    render ข้อความเองจริงๆ จึงได้ตัวอักษรไทยถูกต้อง 100%) ผลลัพธ์เป็น PDF
+ *    หน้าเดียวเสมอ (ภาพเดียววางเต็มหน้า) เหมือนฟอร์มกระดาษต้นฉบับ
  * ================================================================ */
+const PF_PRINT_CSS =
+  '*{box-sizing:border-box;} body,div{margin:0;padding:0;}' +
+  '.pf-wrap{font-family:"Segoe UI","Sarabun",Tahoma,sans-serif; color:#1A1A1A; background:#FFFFFF;}' +
+  '.pf-page{width:1556px; padding:22px; background:#FFFFFF;}' +
+  '.pf-headrow{display:flex; justify-content:space-between; align-items:flex-end; font-size:16px; font-weight:700; margin-bottom:4px;}' +
+  '.pf-headrow .c{font-weight:400; font-size:15px;}' +
+  '.pf-bar{background:#3A3532; color:#FFFFFF; font-weight:700; text-align:center; padding:6px 0; font-size:12.5px; margin-top:12px;}' +
+  '.pf-table{border-collapse:collapse; width:100%; table-layout:fixed; margin-top:2px;}' +
+  '.pf-table th, .pf-table td{border:1px solid #333333; padding:3px 3px; font-size:10px; text-align:center; overflow:hidden; word-break:break-word;}' +
+  '.pf-table th.pf-label, .pf-table td.pf-label{text-align:left; white-space:normal; font-weight:600;}' +
+  '.pf-vert{writing-mode:vertical-rl; text-orientation:mixed; height:64px; font-weight:400;}' +
+  '.pf-sig{margin-top:14px; font-size:12.5px; display:flex; align-items:flex-end; gap:22px; flex-wrap:wrap;}' +
+  '.pf-sig .slot{display:inline-flex; flex-direction:column; align-items:center;}' +
+  '.pf-sig .slot img{height:34px;}' +
+  '.pf-sig .slot .cap{font-size:10.5px; color:#444444; margin-top:2px;}' +
+  '.pf-footnote{font-size:11.5px; margin-top:10px;}';
+
+function renderHtmlToCanvasViaSvg(innerHtml, widthPx, heightPx, scale) {
+  return new Promise((resolve, reject) => {
+    const xhtml = '<div xmlns="http://www.w3.org/1999/xhtml" class="pf-wrap"><style>' + PF_PRINT_CSS + '</style>' + innerHtml + '</div>';
+    const svgStr = '<svg xmlns="http://www.w3.org/2000/svg" width="' + widthPx + '" height="' + heightPx + '">' +
+      '<foreignObject width="100%" height="100%">' + xhtml + '</foreignObject></svg>';
+    const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.ceil(widthPx * scale);
+      canvas.height = Math.ceil(heightPx * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.scale(scale, scale);
+      ctx.drawImage(img, 0, 0, widthPx, heightPx);
+      URL.revokeObjectURL(url);
+      resolve(canvas);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('แปลง HTML เป็นภาพไม่สำเร็จ')); };
+    img.src = url;
+  });
+}
+
 function mergedCellFromRows(shiftRows, shift, sectionId, rowKey, colKey) {
   const row = shiftRows[shift];
   if (!row || !row.data || !row.data[sectionId] || !row.data[sectionId][rowKey]) return '';
@@ -4506,17 +4540,29 @@ function exportProductionDayPDF(reportType, dateStr) {
 
   const root = document.getElementById('prodPrintRoot');
   root.innerHTML = buildProdPrintHTML(form, dateStr, shiftRows);
+  const pageEl = root.querySelector('.pf-page');
+  const widthPx = pageEl.scrollWidth;
+  const heightPx = pageEl.scrollHeight;
+  const innerHtml = root.innerHTML;
 
-  // ใช้ window.print() ของเบราว์เซอร์จริงแทนการ rasterize เอง — รับประกันว่าตัวอักษรไทย
-  // (สระ/วรรณยุกต์ที่ประกอบซ้อนกับพยัญชนะ) จะเรียงถูกต้อง 100% เพราะเป็นการ render จริง
-  // ของเบราว์เซอร์ ไม่ใช่การวาดทีละตัวอักษรแบบ html2canvas
-  // บนมือถือ: หน้าต่างพิมพ์ที่เปิดขึ้น ให้เลือก "บันทึกเป็น PDF" / "Save as PDF" ได้เลย
-  setTimeout(() => { window.print(); }, 60);
+  renderHtmlToCanvasViaSvg(innerHtml, widthPx, heightPx, 2).then(canvas => {
+    const imgData = canvas.toDataURL('image/png');
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    let renderW = pageW - 24;
+    let renderH = renderW * canvas.height / canvas.width;
+    if (renderH > pageH - 24) { renderH = pageH - 24; renderW = renderH * canvas.width / canvas.height; }
+    // ภาพเดียววางเต็มหน้า จึงได้ PDF หน้าเดียวเสมอ (เหมือนฟอร์มกระดาษต้นฉบับ)
+    pdf.addImage(imgData, 'PNG', (pageW - renderW) / 2, (pageH - renderH) / 2, renderW, renderH);
+    pdf.save(form.key + '_' + dateStr + '.pdf');
+    root.innerHTML = '';
+  }).catch(err => {
+    alert('สร้าง PDF ไม่สำเร็จ: ' + (err.message || err));
+    root.innerHTML = '';
+  });
 }
-window.addEventListener('afterprint', () => {
-  const root = document.getElementById('prodPrintRoot');
-  if (root) root.innerHTML = '';
-});
 
 
 function init() {
