@@ -1197,11 +1197,15 @@ const sigPadState = {}; // canvasId -> { ctx, hasDrawn, drawing }
 function initSignaturePad(canvasId) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
-  const state = sigPadState[canvasId] = { ctx: null, hasDrawn: false, drawing: false };
+  let state = sigPadState[canvasId];
+  if (!state) state = sigPadState[canvasId] = { ctx: null, hasDrawn: false, drawing: false, bound: false };
   function resize() {
+    state.hasDrawn = false; // resize ทำให้ bitmap เดิมหาย ต้องรีเซ็ตสถานะให้ตรงกับที่เห็นจริง
     const rect = canvas.parentElement.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = rect.width * dpr;
+    // เผื่อกรณีเรียกตอนที่ view ยังไม่ถูกแสดง (ได้ width เป็น 0) กันไว้ไม่ให้ได้ canvas ขนาด 0 ที่วาดอะไรไม่ได้เลย
+    const w = rect.width > 0 ? rect.width : (canvas.parentElement.offsetWidth || 300);
+    canvas.width = w * dpr;
     canvas.height = 140 * dpr;
     state.ctx = canvas.getContext('2d');
     state.ctx.scale(dpr, dpr);
@@ -1210,15 +1214,15 @@ function initSignaturePad(canvasId) {
     state.ctx.strokeStyle = '#33302E';
   }
   resize();
-  window.addEventListener('resize', () => { if (!state.hasDrawn) resize(); });
-  function pos(e) { const rect = canvas.getBoundingClientRect(); const t = (e.touches && e.touches[0]) || e; return { x: t.clientX - rect.left, y: t.clientY - rect.top }; }
-  function start(e) { state.drawing = true; state.hasDrawn = true; const p = pos(e); state.ctx.beginPath(); state.ctx.moveTo(p.x, p.y); e.preventDefault(); }
-  function move(e) { if (!state.drawing) return; const p = pos(e); state.ctx.lineTo(p.x, p.y); state.ctx.stroke(); e.preventDefault(); }
-  function end() { state.drawing = false; }
-  canvas.addEventListener('pointerdown', start);
-  canvas.addEventListener('pointermove', move);
-  window.addEventListener('pointerup', end);
-  canvas.style.touchAction = 'none';
+  if (!state.bound) {
+    state.bound = true;
+    window.addEventListener('resize', () => { if (!state.hasDrawn) resize(); });
+    const pos = (e) => { const rect = canvas.getBoundingClientRect(); const t = (e.touches && e.touches[0]) || e; return { x: t.clientX - rect.left, y: t.clientY - rect.top }; };
+    canvas.addEventListener('pointerdown', (e) => { state.drawing = true; state.hasDrawn = true; const p = pos(e); state.ctx.beginPath(); state.ctx.moveTo(p.x, p.y); e.preventDefault(); });
+    canvas.addEventListener('pointermove', (e) => { if (!state.drawing) return; const p = pos(e); state.ctx.lineTo(p.x, p.y); state.ctx.stroke(); e.preventDefault(); });
+    window.addEventListener('pointerup', () => { state.drawing = false; });
+    canvas.style.touchAction = 'none';
+  }
 }
 function clearSignaturePad(canvasId) {
   const canvas = document.getElementById(canvasId);
@@ -1250,8 +1254,8 @@ function attemptLogin(empCode, password) {
     if (!emp.password_hash || emp.must_change_password) {
       showView('view-onboard-password');
     } else if (!emp.signature_data) {
-      initSignaturePad('onboardSigCanvas');
       showView('view-onboard-signature');
+      initSignaturePad('onboardSigCanvas');
     } else {
       finalizeLogin(emp);
     }
@@ -1298,7 +1302,7 @@ document.getElementById('onboardPwSubmitBtn').addEventListener('click', () => {
     if (idx !== -1) employees[idx] = data;
     document.getElementById('onboardNewPw1').value = '';
     document.getElementById('onboardNewPw2').value = '';
-    if (!data.signature_data) { initSignaturePad('onboardSigCanvas'); showView('view-onboard-signature'); }
+    if (!data.signature_data) { showView('view-onboard-signature'); initSignaturePad('onboardSigCanvas'); }
     else finalizeLogin(data);
   }).catch(err => { errEl.textContent = 'เชื่อมต่อไม่ได้: ' + (err.message || err); errEl.style.display = 'block'; });
 });
