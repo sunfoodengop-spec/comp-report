@@ -431,6 +431,13 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
   <!-- ========== เลือกโมดูลภายในแผนกที่เลือก (SFO เห็นทั้งจดเครื่อง+จดน้ำ, Sunny เห็นเฉพาะจดเครื่อง) ========== -->
   <div class="view" id="view-site-modules">
     <div class="section-title" id="siteModulesTitle">เลือกโมดูลที่จะใช้งาน</div>
+    <div id="loggedInBar" style="display:flex; align-items:center; justify-content:space-between; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:10px 14px; margin-bottom:14px; font-size:12.5px;">
+      <span>👤 เข้าสู่ระบบเป็น <b id="loggedInName">-</b></span>
+      <span style="display:flex; gap:8px;">
+        <button type="button" id="profileBtn" style="border:1px solid var(--border); color:var(--text); background:none; border-radius:8px; padding:5px 10px; font-size:11.5px; cursor:pointer;">✏️ โปรไฟล์</button>
+        <button type="button" id="logoutBtn" style="border:1px solid var(--red); color:var(--red); background:none; border-radius:8px; padding:5px 10px; font-size:11.5px; cursor:pointer;">🚪 ออกจากระบบ</button>
+      </span>
+    </div>
     <div class="module-card" data-module="compressor">
       <div class="module-card-icon">🌀</div>
       <div class="module-card-body">
@@ -457,6 +464,72 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
     </div>
   </div>
 
+  <!-- ========== เข้าสู่ระบบ (แสดงหลังเลือกแผนก/สาขา ถ้ายังไม่ได้ login) ========== -->
+  <div class="view" id="view-login">
+    <div class="section-title" id="loginTitle">เข้าสู่ระบบ</div>
+    <div class="std-editor-card">
+      <div class="field">
+        <label>รหัสพนักงาน (Username)</label>
+        <input type="text" id="loginEmpCode" placeholder="เช่น 00123" autocomplete="username">
+      </div>
+      <div class="field">
+        <label>รหัสผ่าน (Password)</label>
+        <input type="password" id="loginPassword" placeholder="รหัสผ่านของคุณ" autocomplete="current-password">
+        <div style="font-size:11px; color:var(--muted); margin-top:6px;">💡 ถ้าเข้าระบบครั้งแรก รหัสผ่านเริ่มต้นคือ <b>123456789</b> (ระบบจะให้ตั้งรหัสใหม่ทันที)</div>
+      </div>
+      <div id="loginError" style="color:var(--red); font-size:12.5px; margin:6px 0; display:none;"></div>
+      <button class="save-std-btn" id="loginSubmitBtn">🔓 เข้าสู่ระบบ</button>
+    </div>
+  </div>
+
+  <!-- ========== ตั้งรหัสผ่านใหม่ (บังคับตอน login ครั้งแรก) ========== -->
+  <div class="view" id="view-onboard-password">
+    <div class="section-title">ตั้งรหัสผ่านใหม่ (ครั้งแรกเท่านั้น)</div>
+    <div class="std-editor-card">
+      <p style="font-size:12.5px; color:var(--muted); margin-top:0;">เพื่อความปลอดภัย กรุณาตั้งรหัสผ่านใหม่ของคุณเอง แทนรหัสเริ่มต้น (ตั้งครั้งเดียว ใช้ได้ตลอดจนกว่าจะเปลี่ยนเองในหน้าตั้งค่า)</p>
+      <div class="field"><label>รหัสผ่านใหม่ (อย่างน้อย 4 ตัวอักษร)</label><input type="password" id="onboardNewPw1" autocomplete="new-password"></div>
+      <div class="field"><label>ยืนยันรหัสผ่านใหม่</label><input type="password" id="onboardNewPw2" autocomplete="new-password"></div>
+      <div id="onboardPwError" style="color:var(--red); font-size:12.5px; margin:6px 0; display:none;"></div>
+      <button class="save-std-btn" id="onboardPwSubmitBtn">บันทึกรหัสผ่านใหม่ →</button>
+    </div>
+  </div>
+
+  <!-- ========== วาดลายเซ็น (บังคับตอน login ครั้งแรก) ========== -->
+  <div class="view" id="view-onboard-signature">
+    <div class="section-title">บันทึกลายเซ็นของคุณ (ครั้งแรกเท่านั้น)</div>
+    <div class="std-editor-card">
+      <p style="font-size:12.5px; color:var(--muted); margin-top:0;">ลายเซ็นนี้จะถูกใช้อัตโนมัติทุกครั้งที่คุณบันทึกข้อมูลในระบบ (แก้ไขทีหลังได้ที่หน้าตั้งค่า ⚙)</p>
+      <div class="prod-sig-canvas-wrap"><canvas id="onboardSigCanvas"></canvas></div>
+      <div class="prod-sig-actions"><button type="button" id="onboardSigClearBtn">🗑 ล้างลายเซ็น</button></div>
+      <div id="onboardSigError" style="color:var(--red); font-size:12.5px; margin:6px 0; display:none;"></div>
+      <button class="save-std-btn" id="onboardSigSubmitBtn" style="margin-top:12px;">✅ บันทึกลายเซ็น เริ่มใช้งาน</button>
+    </div>
+  </div>
+
+  <!-- ========== โปรไฟล์ของฉัน (เปลี่ยนรหัสผ่าน/ลายเซ็น — ผู้ใช้ทุกคนเข้าได้เอง) ========== -->
+  <div class="view" id="view-profile">
+    <div class="lock-bar"><button id="profileBackBtn">← กลับ</button></div>
+    <div class="section-title">โปรไฟล์ของฉัน — <span id="profileNameLabel"></span></div>
+
+    <div class="std-editor-card">
+      <div class="section-title" style="margin-top:0;">🔑 เปลี่ยนรหัสผ่าน</div>
+      <div class="field"><label>รหัสผ่านเดิม</label><input type="password" id="profileOldPw" autocomplete="current-password"></div>
+      <div class="field"><label>รหัสผ่านใหม่ (อย่างน้อย 4 ตัวอักษร)</label><input type="password" id="profileNewPw1" autocomplete="new-password"></div>
+      <div class="field"><label>ยืนยันรหัสผ่านใหม่</label><input type="password" id="profileNewPw2" autocomplete="new-password"></div>
+      <div id="profilePwMsg" style="font-size:12.5px; margin:6px 0; display:none;"></div>
+      <button class="save-std-btn" id="profilePwSaveBtn">💾 บันทึกรหัสผ่านใหม่</button>
+    </div>
+
+    <div class="prod-sig-card">
+      <div class="section-title" style="margin-top:0;">✍️ ลายเซ็นของฉัน</div>
+      <p style="font-size:12.5px; color:var(--muted); margin-top:0;">ลายเซ็นนี้จะถูกใช้อัตโนมัติทุกครั้งที่บันทึกข้อมูลในระบบ</p>
+      <div class="prod-sig-canvas-wrap"><canvas id="profileSigCanvas"></canvas></div>
+      <div class="prod-sig-actions"><button type="button" id="profileSigClearBtn">🗑 ล้างลายเซ็น</button></div>
+      <div id="profileSigMsg" style="font-size:12.5px; margin:6px 0; display:none;"></div>
+      <button class="save-std-btn" id="profileSigSaveBtn" style="margin-top:12px;">💾 บันทึกลายเซ็นใหม่</button>
+    </div>
+  </div>
+
   <!-- ========== TAB 1: บันทึกค่า ========== -->
   <div class="view" id="view-log">
     <div id="logSuccess"></div>
@@ -469,8 +542,8 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
 
     <div class="section-title">ข้อมูลผู้กรอก</div>
     <div class="field">
-      <label>ชื่อ-รหัสพนักงาน</label>
-      <select id="empSelect"><option value="">-- เลือกพนักงาน --</option></select>
+      <label>กำลังบันทึกในนามของ</label>
+      <div id="compLoggedInAs" style="padding:12px 14px; background:var(--panel2); border:1px solid var(--border); border-radius:10px; font-weight:700;">-</div>
     </div>
 
     <div class="section-title">เลือกเครื่อง Compressor</div>
@@ -693,8 +766,8 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
 
   <div class="section-title">ข้อมูลผู้กรอก</div>
   <div class="field">
-    <label>ชื่อ-รหัสพนักงาน</label>
-    <select id="waterEmpSelect"><option value="">-- เลือกพนักงาน --</option></select>
+    <label>กำลังบันทึกในนามของ</label>
+    <div id="waterLoggedInAs" style="padding:12px 14px; background:var(--panel2); border:1px solid var(--border); border-radius:10px; font-weight:700;">-</div>
   </div>
 
   <div class="section-title">เลือกระบบ Ripple Plate</div>
@@ -749,8 +822,8 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
 
     <div class="section-title">ข้อมูลผู้กรอก / วันที่ / กะ</div>
     <div class="field">
-      <label>ชื่อ-รหัสพนักงาน</label>
-      <select id="prodEmpSelect"><option value="">-- เลือกพนักงาน --</option></select>
+      <label>กำลังบันทึกในนามของ</label>
+      <div id="prodLoggedInAs" style="padding:12px 14px; background:var(--panel2); border:1px solid var(--border); border-radius:10px; font-weight:700;">-</div>
     </div>
     <div class="field">
       <label>วันที่</label>
@@ -772,15 +845,9 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
       <textarea id="prodNoteField" placeholder="เช่น เครื่องหยุดซ่อมช่วงบ่าย ฯลฯ"></textarea>
     </div>
 
-    <div class="prod-sig-card">
-      <div class="section-title" style="margin-top:0;">ลายเซ็นผู้กรอก (กะที่กำลังบันทึก)</div>
-      <div class="prod-sig-canvas-wrap"><canvas id="prodSigCanvas"></canvas></div>
-      <div class="prod-sig-actions">
-        <button type="button" id="prodSigClearBtn">🗑 ล้างลายเซ็น</button>
-      </div>
-    </div>
+    <div id="prodContributorsBar" style="font-size:11.5px; color:var(--muted); margin-top:10px;"></div>
 
-    <button class="submit-btn" id="prodSubmitBtn" style="margin-top:16px;">✅ บันทึก + เซ็นชื่อกะนี้</button>
+    <button class="submit-btn" id="prodSubmitBtn" style="margin-top:12px;">💾 บันทึกข้อมูลกะนี้ (กดซ้ำได้เรื่อยๆ)</button>
   </div>
 </div>
 
@@ -983,8 +1050,6 @@ let compressorsById = {};
 let readings = [];
 let employees = [];
 let selectedCompressor = null;
-let selectedEmployee = null;
-let selectedWaterEmployee = null;
 let selectedWaterSystem = null;
 let isWaterStopped = false;
 let waterSystems = [];
@@ -1085,53 +1150,258 @@ function isActiveEmployee(e) { return e.active === true || e.active === 'TRUE' |
 // เครื่องที่แอดมินติ๊กไม่ให้นับในแดชบอร์ด "รอบตรวจเช็ค" / แถบสถานะหน้าจดบันทึก (ค่าเริ่มต้น = นับทุกเครื่อง ถ้ายังไม่เคยตั้งค่า)
 function isTrackedForRounds(c) { return c.track_rounds !== false && c.track_rounds !== 'false' && c.track_rounds !== 'FALSE'; }
 
+/* ================================================================
+ * ระบบ Login (รหัสพนักงาน = Username แทนการเลือกชื่อจาก dropdown ทุกครั้ง)
+ * รหัสผ่านเก็บเป็น SHA-256 hash ตรวจสอบฝั่ง client — ระดับความปลอดภัยแบบสะดวก
+ * เทียบเท่า PIN เดิม (พอเหมาะกับการใช้งานภายในองค์กร)
+ * ================================================================ */
+const DEFAULT_EMPLOYEE_PASSWORD = '123456789';
+let currentUser = null;          // { id, emp_code, emp_name, department } — ผู้ที่ login อยู่ตอนนี้
+let pendingLoginUser = null;     // ใช้ระหว่างขั้นตอน onboarding (ตั้งรหัสผ่านใหม่/วาดลายเซ็นครั้งแรก) ก่อนถือว่า login สำเร็จ
+
+async function hashPassword(pw) {
+  const enc = new TextEncoder().encode(pw);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function getCurrentUser() {
+  if (currentUser) return currentUser;
+  try {
+    const raw = localStorage.getItem('session_user');
+    if (raw) { currentUser = JSON.parse(raw); return currentUser; }
+  } catch (e) { /* ข้อมูล session เสีย ถือว่ายังไม่ login */ }
+  return null;
+}
+function setCurrentUser(u) {
+  currentUser = u;
+  localStorage.setItem('session_user', JSON.stringify(u));
+}
+function logoutUser() {
+  currentUser = null;
+  localStorage.removeItem('session_user');
+}
+function updateLoggedInAsDisplays() {
+  const u = getCurrentUser();
+  const label = u ? (u.emp_name + ' (' + u.emp_code + ')') : '-';
+  ['loggedInName','compLoggedInAs','waterLoggedInAs','prodLoggedInAs'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = label;
+  });
+  const profileLabel = document.getElementById('profileNameLabel');
+  if (profileLabel) profileLabel.textContent = label;
+}
+
+/* ---------- Signature pad ใช้ซ้ำได้หลายที่ (onboarding แรกเข้า / โปรไฟล์แก้ลายเซ็น) ---------- */
+const sigPadState = {}; // canvasId -> { ctx, hasDrawn, drawing }
+function initSignaturePad(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const state = sigPadState[canvasId] = { ctx: null, hasDrawn: false, drawing: false };
+  function resize() {
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width * dpr;
+    canvas.height = 140 * dpr;
+    state.ctx = canvas.getContext('2d');
+    state.ctx.scale(dpr, dpr);
+    state.ctx.lineWidth = 2.4;
+    state.ctx.lineCap = 'round';
+    state.ctx.strokeStyle = '#33302E';
+  }
+  resize();
+  window.addEventListener('resize', () => { if (!state.hasDrawn) resize(); });
+  function pos(e) { const rect = canvas.getBoundingClientRect(); const t = (e.touches && e.touches[0]) || e; return { x: t.clientX - rect.left, y: t.clientY - rect.top }; }
+  function start(e) { state.drawing = true; state.hasDrawn = true; const p = pos(e); state.ctx.beginPath(); state.ctx.moveTo(p.x, p.y); e.preventDefault(); }
+  function move(e) { if (!state.drawing) return; const p = pos(e); state.ctx.lineTo(p.x, p.y); state.ctx.stroke(); e.preventDefault(); }
+  function end() { state.drawing = false; }
+  canvas.addEventListener('pointerdown', start);
+  canvas.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', end);
+  canvas.style.touchAction = 'none';
+}
+function clearSignaturePad(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  const state = sigPadState[canvasId];
+  if (!canvas || !state || !state.ctx) return;
+  state.ctx.clearRect(0, 0, canvas.width, canvas.height);
+  state.hasDrawn = false;
+}
+function signaturePadHasDrawn(canvasId) { return !!(sigPadState[canvasId] && sigPadState[canvasId].hasDrawn); }
+function getSignaturePadDataUrl(canvasId) { return document.getElementById(canvasId).toDataURL('image/png'); }
+
+/* ---------- Login ---------- */
+function attemptLogin(empCode, password) {
+  const errEl = document.getElementById('loginError');
+  errEl.style.display = 'none';
+  const emp = employees.find(e => String(e.emp_code) === String(empCode).trim() && isActiveEmployee(e) && (e.department || 'SFO') === currentDepartment);
+  if (!emp) {
+    errEl.textContent = 'ไม่พบรหัสพนักงานนี้ในแผนก ' + currentDepartment;
+    errEl.style.display = 'block';
+    return;
+  }
+  const proceed = (ok) => {
+    if (!ok) {
+      errEl.textContent = 'รหัสผ่านไม่ถูกต้อง';
+      errEl.style.display = 'block';
+      return;
+    }
+    pendingLoginUser = emp;
+    if (!emp.password_hash || emp.must_change_password) {
+      showView('view-onboard-password');
+    } else if (!emp.signature_data) {
+      initSignaturePad('onboardSigCanvas');
+      showView('view-onboard-signature');
+    } else {
+      finalizeLogin(emp);
+    }
+  };
+  if (!emp.password_hash) {
+    // ยังไม่เคยตั้งรหัสผ่านเอง — อนุญาตเฉพาะรหัสเริ่มต้นเท่านั้น
+    proceed(password === DEFAULT_EMPLOYEE_PASSWORD);
+  } else {
+    hashPassword(password).then(h => proceed(h === emp.password_hash));
+  }
+}
+document.getElementById('loginSubmitBtn').addEventListener('click', () => {
+  const code = document.getElementById('loginEmpCode').value.trim();
+  const pw = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  if (!code || !pw) { errEl.textContent = 'กรุณากรอกรหัสพนักงานและรหัสผ่าน'; errEl.style.display = 'block'; return; }
+  attemptLogin(code, pw);
+});
+
+function finalizeLogin(emp) {
+  setCurrentUser({ id: emp.id, emp_code: emp.emp_code, emp_name: emp.emp_name, department: emp.department || currentDepartment });
+  pendingLoginUser = null;
+  document.getElementById('loginEmpCode').value = '';
+  document.getElementById('loginPassword').value = '';
+  updateLoggedInAsDisplays();
+  proceedToSiteModules(currentDepartment, true);
+}
+
+/* ---------- Onboarding: บังคับตั้งรหัสผ่านใหม่ครั้งแรก ---------- */
+document.getElementById('onboardPwSubmitBtn').addEventListener('click', () => {
+  const p1 = document.getElementById('onboardNewPw1').value;
+  const p2 = document.getElementById('onboardNewPw2').value;
+  const errEl = document.getElementById('onboardPwError');
+  errEl.style.display = 'none';
+  if (!p1 || p1.length < 4) { errEl.textContent = 'รหัสผ่านต้องมีอย่างน้อย 4 ตัวอักษร'; errEl.style.display = 'block'; return; }
+  if (p1 !== p2) { errEl.textContent = 'รหัสผ่านทั้งสองช่องไม่ตรงกัน'; errEl.style.display = 'block'; return; }
+  if (p1 === DEFAULT_EMPLOYEE_PASSWORD) { errEl.textContent = 'กรุณาตั้งรหัสผ่านใหม่ที่ไม่ใช่รหัสเริ่มต้น'; errEl.style.display = 'block'; return; }
+  hashPassword(p1).then(hash => withRetry(() => getSbClient().from('employees')
+    .update({ password_hash: hash, must_change_password: false }).eq('id', pendingLoginUser.id).select().single()
+  )).then(({ data, error }) => {
+    if (error) { errEl.textContent = 'บันทึกไม่สำเร็จ: ' + error.message; errEl.style.display = 'block'; return; }
+    pendingLoginUser = data;
+    const idx = employees.findIndex(e => e.id === data.id);
+    if (idx !== -1) employees[idx] = data;
+    document.getElementById('onboardNewPw1').value = '';
+    document.getElementById('onboardNewPw2').value = '';
+    if (!data.signature_data) { initSignaturePad('onboardSigCanvas'); showView('view-onboard-signature'); }
+    else finalizeLogin(data);
+  }).catch(err => { errEl.textContent = 'เชื่อมต่อไม่ได้: ' + (err.message || err); errEl.style.display = 'block'; });
+});
+
+/* ---------- Onboarding: บังคับวาดลายเซ็นครั้งแรก ---------- */
+document.getElementById('onboardSigClearBtn').addEventListener('click', () => clearSignaturePad('onboardSigCanvas'));
+document.getElementById('onboardSigSubmitBtn').addEventListener('click', () => {
+  const errEl = document.getElementById('onboardSigError');
+  errEl.style.display = 'none';
+  if (!signaturePadHasDrawn('onboardSigCanvas')) { errEl.textContent = 'กรุณาวาดลายเซ็นก่อน'; errEl.style.display = 'block'; return; }
+  const sig = getSignaturePadDataUrl('onboardSigCanvas');
+  withRetry(() => getSbClient().from('employees').update({ signature_data: sig }).eq('id', pendingLoginUser.id).select().single())
+    .then(({ data, error }) => {
+      if (error) { errEl.textContent = 'บันทึกไม่สำเร็จ: ' + error.message; errEl.style.display = 'block'; return; }
+      const idx = employees.findIndex(e => e.id === data.id);
+      if (idx !== -1) employees[idx] = data;
+      finalizeLogin(data);
+    }).catch(err => { errEl.textContent = 'เชื่อมต่อไม่ได้: ' + (err.message || err); errEl.style.display = 'block'; });
+});
+
+/* ---------- ออกจากระบบ ---------- */
+document.getElementById('logoutBtn').addEventListener('click', () => {
+  if (!confirm('ยืนยันออกจากระบบ?')) return;
+  logoutUser();
+  selectSite(currentDepartment, true);
+});
+
+/* ---------- โปรไฟล์ของฉัน (เปลี่ยนรหัสผ่าน/ลายเซ็นได้เอง) ---------- */
+document.getElementById('profileBtn').addEventListener('click', () => {
+  const u = getCurrentUser();
+  if (!u) return;
+  document.getElementById('profileNameLabel').textContent = u.emp_name + ' (' + u.emp_code + ')';
+  document.getElementById('profileOldPw').value = '';
+  document.getElementById('profileNewPw1').value = '';
+  document.getElementById('profileNewPw2').value = '';
+  document.getElementById('profilePwMsg').style.display = 'none';
+  document.getElementById('profileSigMsg').style.display = 'none';
+  showView('view-profile');
+  initSignaturePad('profileSigCanvas');
+});
+document.getElementById('profileBackBtn').addEventListener('click', () => showView('view-site-modules'));
+
+document.getElementById('profilePwSaveBtn').addEventListener('click', () => {
+  const u = getCurrentUser();
+  if (!u) return;
+  const oldPw = document.getElementById('profileOldPw').value;
+  const p1 = document.getElementById('profileNewPw1').value;
+  const p2 = document.getElementById('profileNewPw2').value;
+  const msg = document.getElementById('profilePwMsg');
+  const showMsg = (text, isErr) => { msg.textContent = text; msg.style.color = isErr ? 'var(--red)' : 'var(--accent)'; msg.style.display = 'block'; };
+  msg.style.display = 'none';
+  if (!oldPw || !p1 || !p2) { showMsg('กรุณากรอกให้ครบทุกช่อง', true); return; }
+  if (p1.length < 4) { showMsg('รหัสผ่านใหม่ต้องมีอย่างน้อย 4 ตัวอักษร', true); return; }
+  if (p1 !== p2) { showMsg('รหัสผ่านใหม่ทั้งสองช่องไม่ตรงกัน', true); return; }
+
+  const emp = employees.find(e => e.id === u.id);
+  const checkOld = (emp && emp.password_hash) ? hashPassword(oldPw).then(h => h === emp.password_hash) : Promise.resolve(oldPw === DEFAULT_EMPLOYEE_PASSWORD);
+  checkOld.then(ok => {
+    if (!ok) { showMsg('รหัสผ่านเดิมไม่ถูกต้อง', true); return null; }
+    return hashPassword(p1);
+  }).then(hash => {
+    if (!hash) return;
+    return withRetry(() => getSbClient().from('employees').update({ password_hash: hash, must_change_password: false }).eq('id', u.id).select().single())
+      .then(({ data, error }) => {
+        if (error) { showMsg('บันทึกไม่สำเร็จ: ' + error.message, true); return; }
+        const idx = employees.findIndex(e => e.id === data.id);
+        if (idx !== -1) employees[idx] = data;
+        document.getElementById('profileOldPw').value = '';
+        document.getElementById('profileNewPw1').value = '';
+        document.getElementById('profileNewPw2').value = '';
+        showMsg('✅ เปลี่ยนรหัสผ่านสำเร็จ', false);
+      });
+  }).catch(err => showMsg('เชื่อมต่อไม่ได้: ' + (err.message || err), true));
+});
+
+document.getElementById('profileSigClearBtn').addEventListener('click', () => clearSignaturePad('profileSigCanvas'));
+document.getElementById('profileSigSaveBtn').addEventListener('click', () => {
+  const u = getCurrentUser();
+  if (!u) return;
+  const msg = document.getElementById('profileSigMsg');
+  const showMsg = (text, isErr) => { msg.textContent = text; msg.style.color = isErr ? 'var(--red)' : 'var(--accent)'; msg.style.display = 'block'; };
+  msg.style.display = 'none';
+  if (!signaturePadHasDrawn('profileSigCanvas')) { showMsg('กรุณาวาดลายเซ็นก่อน', true); return; }
+  const sig = getSignaturePadDataUrl('profileSigCanvas');
+  withRetry(() => getSbClient().from('employees').update({ signature_data: sig }).eq('id', u.id).select().single())
+    .then(({ data, error }) => {
+      if (error) { showMsg('บันทึกไม่สำเร็จ: ' + error.message, true); return; }
+      const idx = employees.findIndex(e => e.id === data.id);
+      if (idx !== -1) employees[idx] = data;
+      showMsg('✅ บันทึกลายเซ็นใหม่สำเร็จ', false);
+    }).catch(err => showMsg('เชื่อมต่อไม่ได้: ' + (err.message || err), true));
+});
+
 function loadEmployees() {
   return withRetry(() => getSbClient().from('employees').select('*').order('emp_name')).then(({data, error}) => {
     if (error) throw new Error(error.message);
     employees = Array.isArray(data) ? data : [];
-    populateEmployeeSelect();
+    updateLoggedInAsDisplays();
     if (document.getElementById('sub-emp').classList.contains('active')) renderEmployeeList();
   });
 }
 
 function empLabel(e) { return e.emp_code + ' — ' + e.emp_name; }
-
-function populateEmployeeSelect() {
-  const savedCode = localStorage.getItem('emp_code') || '';
-  ['empSelect', 'waterEmpSelect'].forEach(selId => {
-    const sel = document.getElementById(selId);
-    if (!sel) return;
-    sel.innerHTML = '<option value="">-- เลือกพนักงาน --</option>';
-    let list = employees.filter(isActiveEmployee);
-    if (selId === 'empSelect' && currentDepartment) {
-      list = list.filter(e => (e.department || 'SFO') === currentDepartment);
-    }
-    list.forEach(e => {
-      const opt = document.createElement('option');
-      opt.value = e.id;
-      opt.textContent = empLabel(e);
-      sel.appendChild(opt);
-    });
-    if (savedCode) {
-      const match = list.find(e => String(e.emp_code) === savedCode);
-      if (match) {
-        sel.value = match.id;
-        if (selId === 'empSelect') selectedEmployee = match;
-        else selectedWaterEmployee = match;
-      }
-    }
-  });
-}
-
-document.getElementById('empSelect').addEventListener('change', function() {
-  selectedEmployee = employees.find(e => String(e.id) === String(this.value)) || null;
-  if (selectedEmployee) localStorage.setItem('emp_code', selectedEmployee.emp_code);
-});
-
-document.getElementById('waterEmpSelect').addEventListener('change', function() {
-  selectedWaterEmployee = employees.find(e => String(e.id) === String(this.value)) || null;
-  if (selectedWaterEmployee) localStorage.setItem('emp_code', selectedWaterEmployee.emp_code);
-});
 
 /* ================= TAB 1: ฟอร์มบันทึกค่า ================= */
 let isMachineStopped = false;
@@ -1402,17 +1672,16 @@ function handleReadingSaveSuccess(row, recovered) {
 
 document.getElementById('submitBtn').addEventListener('click', function() {
   if (isSubmittingReading) return; // กันกดซ้ำระหว่างกำลังบันทึกอยู่
-  if (!selectedEmployee) { alert('กรุณาเลือกชื่อพนักงาน'); return; }
+  const loggedIn = getCurrentUser();
+  if (!loggedIn) { alert('กรุณาเข้าสู่ระบบก่อน'); return; }
   if (!selectedCompressor) { alert('กรุณาเลือกเครื่อง Compressor'); return; }
-
-  localStorage.setItem('emp_code', selectedEmployee.emp_code);
 
   const row = {
     compressor_id: selectedCompressor.id,
     no_label: selectedCompressor.no_label,
     load_area: selectedCompressor.load_area,
-    employee_name: selectedEmployee.emp_name,
-    employee_code: selectedEmployee.emp_code,
+    employee_name: loggedIn.emp_name,
+    employee_code: loggedIn.emp_code,
     note: document.getElementById('noteField').value.trim(),
     is_stopped: isMachineStopped,
     // รหัสอ้างอิงเฉพาะของการส่งครั้งนี้ — ฐานข้อมูลบังคับห้ามซ้ำ (unique constraint) กันข้อมูลซ้ำจากการลองส่งซ้ำอัตโนมัติ/กดซ้ำได้แน่นอน 100%
@@ -2864,7 +3133,7 @@ function renderEmployeeList() {
         if (error) { alert('เกิดข้อผิดพลาด: ' + error.message); return; }
         emp.active = newActive;
         renderEmployeeList();
-        populateEmployeeSelect();
+        updateLoggedInAsDisplays();
       }).catch(err => { this.disabled=false; alert('เชื่อมต่อไม่ได้: '+(err.message||err)); });
     });
 
@@ -2883,7 +3152,7 @@ function renderEmployeeList() {
         emp.emp_code = newCode; emp.emp_name = newName; emp.department = newDept;
         form.classList.remove('open');
         renderEmployeeList();
-        populateEmployeeSelect();
+        updateLoggedInAsDisplays();
       }).catch(err => { this.disabled=false; this.textContent='บันทึก'; alert('เชื่อมต่อไม่ได้: '+(err.message||err)); });
     });
   });
@@ -2907,7 +3176,7 @@ document.getElementById('addEmpBtn').addEventListener('click', function() {
     employees.push(data);
     codeInput.value = ''; nameInput.value = '';
     renderEmployeeList();
-    populateEmployeeSelect();
+    updateLoggedInAsDisplays();
   }).catch(err => { this.disabled=false; this.textContent='+ เพิ่มพนักงาน'; alert('เชื่อมต่อไม่ได้: '+(err.message||err)); });
 });
 
@@ -2943,6 +3212,23 @@ function updateDeptBadge() {
 function selectSite(dept, pushState) {
   currentDepartment = dept;
   localStorage.setItem('current_department', dept);
+  const u = getCurrentUser();
+  if (!u || u.department !== dept) {
+    // ยังไม่ได้ login หรือ login ไว้เป็นอีกแผนก — ต้องเข้าสู่ระบบก่อนเข้าเลือกโมดูล
+    document.getElementById('loginTitle').textContent = 'เข้าสู่ระบบ — แผนก ' + dept;
+    document.getElementById('loginError').style.display = 'none';
+    document.getElementById('bottomNav').style.display = 'none';
+    document.querySelectorAll('.navbtn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById('view-login').classList.add('active');
+    document.getElementById('appTitle').textContent = dept + ' — เข้าสู่ระบบ';
+    document.getElementById('deptSwitchBtn').style.display = 'none';
+    if (pushState !== false) history.pushState({ page: 'site', department: dept }, '', '#site-' + dept);
+    return;
+  }
+  proceedToSiteModules(dept, pushState);
+}
+function proceedToSiteModules(dept, pushState) {
   document.getElementById('siteModulesTitle').textContent = dept + ' — เลือกโมดูลที่จะใช้งาน';
   document.getElementById('waterModuleCard').style.display = dept === 'SFO' ? 'flex' : 'none';
   document.getElementById('productionModuleCard').style.display = dept === 'SFO' ? 'flex' : 'none';
@@ -2952,6 +3238,7 @@ function selectSite(dept, pushState) {
   document.getElementById('view-site-modules').classList.add('active');
   document.getElementById('appTitle').textContent = dept + ' — เลือกโมดูล';
   document.getElementById('deptSwitchBtn').style.display = 'none';
+  updateLoggedInAsDisplays();
   if (pushState !== false) history.pushState({ page: 'site', department: dept }, '', '#site-' + dept);
 }
 document.querySelectorAll('#view-home .module-card[data-dept]').forEach(card => {
@@ -2974,7 +3261,7 @@ function setModule(mod, pushState) {
 
   if (mod === 'compressor') {
     populateCompressorSelects();
-    populateEmployeeSelect();
+    updateLoggedInAsDisplays();
     selectedCompressor = null;
     document.getElementById('compSelect').value = '';
     renderCompInfo(); renderParamFields();
@@ -3408,10 +3695,10 @@ function handleWaterSaveSuccess(row, recovered) {
 
 document.getElementById('waterSubmitBtn').addEventListener('click', function() {
   if (isSubmittingWaterReading) return;
-  if (!selectedWaterEmployee) { alert('กรุณาเลือกชื่อพนักงาน'); return; }
+  const loggedIn = getCurrentUser();
+  if (!loggedIn) { alert('กรุณาเข้าสู่ระบบก่อน'); return; }
   if (!selectedWaterSystem) { alert('กรุณาเลือกระบบ'); return; }
 
-  localStorage.setItem('emp_code', selectedWaterEmployee.emp_code);
   const s = selectedWaterSystem;
   const tank = waterTanksById[s.tank_id];
 
@@ -3420,8 +3707,8 @@ document.getElementById('waterSubmitBtn').addEventListener('click', function() {
     system_name: s.name,
     tank_id: s.tank_id,
     tank_name: tank ? tank.name : null,
-    employee_name: selectedWaterEmployee.emp_name,
-    employee_code: selectedWaterEmployee.emp_code,
+    employee_name: loggedIn.emp_name,
+    employee_code: loggedIn.emp_code,
     note: document.getElementById('waterNoteField').value.trim(),
     is_stopped: isWaterStopped,
     client_request_id: 'wreq_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10)
@@ -3948,7 +4235,6 @@ const PROD_FORMS = {
 /* ---------- state ---------- */
 let prodFormKey = null;
 let prodShift = 'A';
-let prodSelectedEmployee = null;
 let prodDataByShift = { A:{}, B:{}, C:{}, };   // { A: { sectionId: {...} }, ... }
 let prodNoteByShift = { A:'', B:'', C:'' };
 let prodDoneShifts = { A:false, B:false, C:false };
@@ -3960,7 +4246,6 @@ function initProductionModule() {
   if (!prodModuleLoaded) {
     prodModuleLoaded = true;
     renderProdFormPicker();
-    initProdSigCanvas();
     const today = new Date(); const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
     const pad = n => String(n).padStart(2,'0');
     const fmt = d => d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
@@ -3968,6 +4253,7 @@ function initProductionModule() {
     document.getElementById('prodChartFromDate').value = fmt(weekAgo);
     populateProdChartSeriesSelect();
   }
+  updateLoggedInAsDisplays();
   loadProductionHistory({});
 }
 
@@ -4007,28 +4293,12 @@ function selectProdForm(key) {
   if (!document.getElementById('prodDateInput').value) {
     document.getElementById('prodDateInput').value = todayDateStr();
   }
-  populateProdEmployeeSelect();
+  updateLoggedInAsDisplays();
   prodShift = 'A';
   loadProdDayRows();
   renderProdShiftTabs();
   renderProdSections();
 }
-
-function populateProdEmployeeSelect() {
-  const sel = document.getElementById('prodEmpSelect');
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">-- เลือกพนักงาน --</option>';
-  employees.filter(isActiveEmployee).filter(e => (e.department||'SFO') === (currentDepartment||'SFO'))
-    .forEach(e => {
-      const opt = document.createElement('option');
-      opt.value = e.id; opt.textContent = empLabel(e);
-      sel.appendChild(opt);
-    });
-  if (cur) sel.value = cur;
-}
-document.getElementById('prodEmpSelect').addEventListener('change', function() {
-  prodSelectedEmployee = employees.find(e => String(e.id) === String(this.value)) || null;
-});
 
 document.getElementById('prodDateInput').addEventListener('change', () => {
   if (!prodFormKey) return;
@@ -4051,7 +4321,7 @@ document.querySelectorAll('#prodShiftTabs .prod-shift-tab').forEach(tab => {
     prodShift = this.dataset.shift;
     renderProdShiftTabs();
     renderProdSections();
-    clearProdSigCanvas();
+    renderProdContributorsBar();
     document.getElementById('prodNoteField').value = prodNoteByShift[prodShift] || '';
   });
 });
@@ -4241,85 +4511,60 @@ function loadProdDayRows() {
     });
     renderProdShiftTabs();
     renderProdSections();
+    renderProdContributorsBar();
     document.getElementById('prodNoteField').value = prodNoteByShift[prodShift] || '';
   }).catch(err => { alert('โหลดข้อมูลเดิมไม่สำเร็จ: ' + (err.message||err)); });
 }
 
-/* ---------- 5) Signature pad ---------- */
-let prodSigCtx = null, prodSigDrawing = false, prodSigHasDrawn = false;
-function initProdSigCanvas() {
-  const canvas = document.getElementById('prodSigCanvas');
-  function resize() {
-    const rect = canvas.parentElement.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = rect.width * dpr;
-    canvas.height = 140 * dpr;
-    prodSigCtx = canvas.getContext('2d');
-    prodSigCtx.scale(dpr, dpr);
-    prodSigCtx.lineWidth = 2.4;
-    prodSigCtx.lineCap = 'round';
-    prodSigCtx.strokeStyle = '#33302E';
-  }
-  resize();
-  window.addEventListener('resize', () => { if (!prodSigHasDrawn) resize(); });
-
-  function pos(e) {
-    const rect = canvas.getBoundingClientRect();
-    const t = (e.touches && e.touches[0]) || e;
-    return { x: t.clientX - rect.left, y: t.clientY - rect.top };
-  }
-  function start(e) { prodSigDrawing = true; prodSigHasDrawn = true; const p = pos(e); prodSigCtx.beginPath(); prodSigCtx.moveTo(p.x, p.y); e.preventDefault(); }
-  function move(e) { if (!prodSigDrawing) return; const p = pos(e); prodSigCtx.lineTo(p.x, p.y); prodSigCtx.stroke(); e.preventDefault(); }
-  function end() { prodSigDrawing = false; }
-
-  canvas.addEventListener('pointerdown', start);
-  canvas.addEventListener('pointermove', move);
-  window.addEventListener('pointerup', end);
-  canvas.style.touchAction = 'none';
+/* ---------- 5) บันทึก (กดซ้ำได้เรื่อยๆ ระหว่างกะ — ผู้ login ที่กดบันทึกจะถูกเพิ่มเป็น
+   ผู้ร่วมกรอกอัตโนมัติ พร้อมลายเซ็นที่บันทึกไว้ตอน login/โปรไฟล์ ไม่ต้องเซ็นซ้ำทุกครั้ง) ---------- */
+function renderProdContributorsBar() {
+  const bar = document.getElementById('prodContributorsBar');
+  if (!bar) return;
+  const row = prodSubmittedRows[prodShift];
+  const contributors = (row && Array.isArray(row.contributors)) ? row.contributors : [];
+  bar.textContent = contributors.length
+    ? ('👥 ผู้ร่วมกรอกกะนี้: ' + contributors.map(c => c.emp_name).join(', '))
+    : 'ยังไม่มีใครบันทึกข้อมูลกะนี้';
 }
-function clearProdSigCanvas() {
-  const canvas = document.getElementById('prodSigCanvas');
-  if (!prodSigCtx) return;
-  prodSigCtx.clearRect(0, 0, canvas.width, canvas.height);
-  prodSigHasDrawn = false;
-}
-document.getElementById('prodSigClearBtn').addEventListener('click', clearProdSigCanvas);
 
-/* ---------- 6) บันทึก / เซ็นชื่อ ---------- */
 document.getElementById('prodSubmitBtn').addEventListener('click', function() {
   if (isSubmittingProdReading) return;
   if (!prodFormKey) return;
-  if (!prodSelectedEmployee) { alert('กรุณาเลือกชื่อพนักงาน'); return; }
+  const loggedIn = getCurrentUser();
+  if (!loggedIn) { alert('กรุณาเข้าสู่ระบบก่อน'); return; }
   const dateStr = document.getElementById('prodDateInput').value;
   if (!dateStr) { alert('กรุณาเลือกวันที่'); return; }
-  if (!prodSigHasDrawn) { alert('กรุณาเซ็นชื่อในช่องลายเซ็นก่อนบันทึก'); return; }
 
-  const totalInputs = document.querySelectorAll('#prodSectionsWrap .prod-grid input[type="text"]:not(.prod-note-input), #prodSectionsWrap .prod-ix-toggle').length;
-  const filledInputs = document.querySelectorAll('#prodSectionsWrap .prod-grid input[type="text"]:not(.prod-note-input).filled, #prodSectionsWrap .prod-ix-toggle .prod-ix-btn.sel').length;
-  if (totalInputs - filledInputs > 0) {
-    if (!confirm('ยังกรอกไม่ครบทุกช่อง (เหลือ ' + (totalInputs-filledInputs) + ' ช่อง) ต้องการบันทึกต่อเลยหรือไม่?')) return;
+  const empFull = employees.find(e => String(e.id) === String(loggedIn.id));
+  const signatureSnapshot = empFull ? empFull.signature_data : null;
+
+  const existingRow = prodSubmittedRows[prodShift];
+  const contributors = (existingRow && Array.isArray(existingRow.contributors)) ? existingRow.contributors.slice() : [];
+  if (!contributors.some(c => String(c.employee_id) === String(loggedIn.id))) {
+    contributors.push({
+      employee_id: loggedIn.id,
+      emp_code: loggedIn.emp_code,
+      emp_name: loggedIn.emp_name,
+      signature_data: signatureSnapshot,
+      first_saved_at: new Date().toISOString()
+    });
   }
-
-  localStorage.setItem('prod_emp_id', prodSelectedEmployee.id);
-  const canvas = document.getElementById('prodSigCanvas');
-  const signatureDataUrl = canvas.toDataURL('image/png');
 
   const row = {
     report_type: prodFormKey,
     report_date: dateStr,
     shift: prodShift,
     department: currentDepartment || 'SFO',
-    employee_id: prodSelectedEmployee.id,
-    employee_code: prodSelectedEmployee.emp_code,
-    employee_name: prodSelectedEmployee.emp_name,
     data: prodDataByShift[prodShift],
     note: prodNoteByShift[prodShift] || null,
-    signature_data: signatureDataUrl,
+    contributors: contributors,
     is_active: true,
     client_request_id: 'preq_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10)
   };
 
   const btn = this;
+  const originalText = btn.textContent;
   isSubmittingProdReading = true;
   btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
 
@@ -4328,17 +4573,18 @@ document.getElementById('prodSubmitBtn').addEventListener('click', function() {
   ).then(({ data, error }) => {
     if (error) throw new Error(error.message);
     isSubmittingProdReading = false;
-    btn.disabled = false; btn.textContent = '✅ บันทึก + เซ็นชื่อกะนี้';
+    btn.disabled = false; btn.textContent = originalText;
     prodDoneShifts[prodShift] = true;
     prodSubmittedRows[prodShift] = data;
     renderProdShiftTabs();
+    renderProdContributorsBar();
     const box = document.getElementById('prodLogSuccess');
-    box.innerHTML = '<div class="success-banner">✅ บันทึกและเซ็นชื่อกะ' + PROD_SHIFT_LABEL[prodShift] + ' สำเร็จ</div>';
-    setTimeout(() => { box.innerHTML = ''; }, 6000);
+    box.innerHTML = '<div class="success-banner">✅ บันทึกข้อมูลกะ' + PROD_SHIFT_LABEL[prodShift] + ' สำเร็จ</div>';
+    setTimeout(() => { box.innerHTML = ''; }, 4000);
     loadProductionHistory({});
   }).catch(err => {
     isSubmittingProdReading = false;
-    btn.disabled = false; btn.textContent = '✅ บันทึก + เซ็นชื่อกะนี้';
+    btn.disabled = false; btn.textContent = originalText;
     alert('เชื่อมต่อไม่ได้: ' + (err.message || err) + '\n\nยังไม่ได้บันทึกข้อมูล กรุณาลองกดบันทึกใหม่อีกครั้งได้เลย ไม่ซ้ำแน่นอน');
   });
 });
@@ -4545,9 +4791,18 @@ function openProductionView(reportType, dateStr) {
   let sigHtml = '<div class="prod-view-sig-row">';
   ['A','B','C'].forEach(s => {
     const row = shiftRows[s];
-    sigHtml += '<div class="slot">';
-    sigHtml += row && row.signature_data ? ('<img src="' + row.signature_data + '">') : '<div class="empty-sig">ยังไม่เซ็น</div>';
-    sigHtml += '<div class="cap">' + PROD_SHIFT_LABEL[s] + (row ? (' — ' + escapeHtml(row.employee_name || '')) : '') + '</div>';
+    const contributors = (row && Array.isArray(row.contributors)) ? row.contributors : [];
+    sigHtml += '<div class="slot" style="align-items:flex-start;">';
+    sigHtml += '<div class="cap" style="font-weight:700; margin-bottom:6px;">กะ' + PROD_SHIFT_LABEL[s] + '</div>';
+    if (!contributors.length) {
+      sigHtml += '<div class="empty-sig">ยังไม่มีใครบันทึก</div>';
+    } else {
+      contributors.forEach(c => {
+        sigHtml += '<div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">';
+        sigHtml += c.signature_data ? ('<img src="' + c.signature_data + '" style="height:34px; background:var(--panel2); border-radius:4px;">') : '<div class="empty-sig" style="width:70px; height:34px; font-size:9px;">ไม่มีลายเซ็น</div>';
+        sigHtml += '<span class="cap">' + escapeHtml(c.emp_name || '') + '</span></div>';
+      });
+    }
     if (row && isAdminUnlocked()) {
       sigHtml += '<button type="button" class="prod-shift-del-btn" data-del-id="' + row.id + '" data-del-shift="' + s + '" style="margin-top:4px; font-size:10.5px; color:var(--red); background:none; border:1px solid var(--red); border-radius:6px; padding:3px 8px; cursor:pointer;">🗑 ลบกะนี้</button>';
     }
@@ -4907,24 +5162,35 @@ function drawPdfHeader(doc, form, dateStr) {
 }
 
 function drawPdfFooter(doc, form, shiftRows, y) {
+  const pageW = doc.internal.pageSize.getWidth();
+  const totalW = pageW - PDF_MARGIN * 2;
   doc.setFont('Sarabun', 'normal'); doc.setFontSize(7.3); doc.setTextColor(20,20,20);
   doc.text('หมายเหตุ:การจดบันทึกต้องระบุเวลาครบทุกช่อง', PDF_MARGIN, y + 10);
-
   doc.setFont('Sarabun', 'bold'); doc.setFontSize(8);
-  doc.text(form.footerSign, PDF_MARGIN, y + 27);
-  let x = PDF_MARGIN + doc.getTextWidth(form.footerSign) + 16;
+  doc.text(form.footerSign, PDF_MARGIN, y + 24);
 
-  ['A','B','C'].forEach(s => {
+  const colW = totalW / 3;
+  ['A','B','C'].forEach((s, i) => {
+    const x = PDF_MARGIN + i * colW;
     const row = shiftRows[s];
-    if (row && row.signature_data) {
-      try { doc.addImage(row.signature_data, 'PNG', x, y + 12, 58, 20); } catch (e) { /* ข้ามถ้าภาพเสีย */ }
+    const contributors = (row && Array.isArray(row.contributors)) ? row.contributors : [];
+    let cy = y + 34;
+    doc.setFont('Sarabun', 'bold'); doc.setFontSize(7.5); doc.setTextColor(20,20,20);
+    doc.text('กะ' + PROD_SHIFT_LABEL[s], x, cy);
+    cy += 10;
+    if (!contributors.length) {
+      doc.setFont('Sarabun', 'normal'); doc.setFontSize(6.6); doc.setTextColor(120,120,120);
+      doc.text('(ยังไม่มีใครบันทึก)', x, cy);
     } else {
-      doc.setDrawColor(60,60,60);
-      doc.line(x, y + 30, x + 68, y + 30);
+      contributors.forEach(c => {
+        if (c.signature_data) {
+          try { doc.addImage(c.signature_data, 'PNG', x, cy - 8, 44, 15); } catch (e) { /* ข้ามถ้าภาพเสีย */ }
+        }
+        doc.setFont('Sarabun', 'normal'); doc.setFontSize(6.6); doc.setTextColor(60,60,60);
+        doc.text(c.emp_name || '', x + 48, cy);
+        cy += 17;
+      });
     }
-    doc.setFont('Sarabun', 'normal'); doc.setFontSize(6.6); doc.setTextColor(60,60,60);
-    doc.text(PROD_SHIFT_LABEL[s] + (row ? (' - ' + (row.employee_name || '')) : ' (ยังไม่เซ็น)'), x, y + 37);
-    x += 96;
   });
 }
 
