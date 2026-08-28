@@ -377,6 +377,14 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
   .prod-hist-shift-badge { flex:1; text-align:center; padding:6px 4px; border-radius:8px; font-size:11.5px; font-weight:700; background:var(--panel2); color:var(--muted); border:1px solid var(--border); }
   .prod-hist-shift-badge.done { background:#E5F3EA; color:#2F6B45; border-color:rgba(47,107,69,0.3); }
   .prod-fill-warn { font-size:11.5px; color:var(--accent); background:var(--accent-soft); border-radius:8px; padding:8px 10px; margin:10px 0; display:none; }
+  .prod-hist-card-actions { display:flex; gap:8px; }
+  .prod-hist-card-actions button { flex:1; padding:9px; border-radius:8px; border:1px solid var(--accent); background:var(--panel); color:var(--accent); font-weight:700; font-size:12.5px; cursor:pointer; }
+  .prod-hist-card-actions button.secondary { border-color:var(--border); color:var(--text); }
+  .prod-view-sig-row { display:flex; gap:22px; flex-wrap:wrap; margin-top:16px; padding-top:14px; border-top:1px dashed var(--border); }
+  .prod-view-sig-row .slot { display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .prod-view-sig-row .slot img { height:44px; background:var(--panel2); border-radius:6px; }
+  .prod-view-sig-row .slot .empty-sig { width:110px; height:44px; border:1.5px dashed var(--border); border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:10.5px; color:var(--muted); }
+  .prod-view-sig-row .slot .cap { font-size:11px; color:var(--muted); text-align:center; }
 
 </style>
 </head>
@@ -777,20 +785,66 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
 
 <!-- ========== PRODUCTION MODULE: ประวัติ ========== -->
 <div class="view" id="view-production-history">
-  <div class="filter-bar">
-    <select id="prodHistFormFilter">
-      <option value="">ทุกฟอร์ม</option>
-      <option value="comp_52">ห้องคอม 5,2</option>
-      <option value="comp_46">ห้องคอม 4,6</option>
-      <option value="comp_3">ห้องคอม 3</option>
-    </select>
-    <select id="prodHistRangeFilter">
-      <option value="7">7 วันล่าสุด</option>
-      <option value="30" selected>30 วันล่าสุด</option>
-      <option value="all">ทั้งหมด</option>
-    </select>
+  <div class="chip-row">
+    <div class="chip active" data-histtab="list">📋 รายการ</div>
+    <div class="chip" data-histtab="chart">📈 กราฟแนวโน้ม</div>
   </div>
-  <div id="prodHistoryList"><div class="loading-text">กำลังโหลด...</div></div>
+
+  <div class="subview active" id="prodHistTabList">
+    <div class="filter-bar">
+      <select id="prodHistFormFilter">
+        <option value="">ทุกฟอร์ม</option>
+        <option value="comp_52">ห้องคอม 5,2</option>
+        <option value="comp_46">ห้องคอม 4,6</option>
+        <option value="comp_3">ห้องคอม 3</option>
+      </select>
+      <select id="prodHistRangeFilter">
+        <option value="7">7 วันล่าสุด</option>
+        <option value="30" selected>30 วันล่าสุด</option>
+        <option value="all">ทั้งหมด</option>
+      </select>
+    </div>
+    <div id="prodHistoryList"><div class="loading-text">กำลังโหลด...</div></div>
+  </div>
+
+  <div class="subview" id="prodHistTabChart">
+    <div class="section-title">📈 กราฟแนวโน้มค่าตัวเลขย้อนหลัง</div>
+    <div class="std-editor-card" style="margin-bottom:16px;">
+      <div class="field">
+        <label>ฟอร์ม</label>
+        <select id="prodChartFormSelect">
+          <option value="comp_52">ห้องคอม 5,2</option>
+          <option value="comp_46">ห้องคอม 4,6</option>
+          <option value="comp_3">ห้องคอม 3</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>รายการ (ค่าเฉลี่ยต่อวัน จากทุกกะที่มีข้อมูล)</label>
+        <select id="prodChartSeriesSelect"></select>
+      </div>
+      <div class="two-col">
+        <div class="field"><label>จากวันที่</label><input type="date" id="prodChartFromDate"></div>
+        <div class="field"><label>ถึงวันที่</label><input type="date" id="prodChartToDate"></div>
+      </div>
+      <button class="save-std-btn" id="prodChartGenerateBtn">📈 สร้างกราฟ</button>
+    </div>
+    <div id="prodChartResultWrap" style="display:none; margin-bottom:20px;">
+      <div style="overflow-x:auto; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; box-shadow:var(--shadow);">
+        <canvas id="prodTrendChart" height="300"></canvas>
+      </div>
+      <button class="export-btn-full" id="prodChartDownloadBtn" style="margin-top:12px;">💾 บันทึกภาพกราฟ (PNG ความละเอียดสูง)</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== PRODUCTION MODULE: ดูฟอร์มแบบเต็มหน้า (จากประวัติ) ========== -->
+<div class="view" id="view-production-view">
+  <div class="lock-bar">
+    <button id="prodViewBackBtn">← กลับ</button>
+    <button id="prodViewExportBtn" style="color:var(--accent); font-weight:700;">📄 Export PDF</button>
+  </div>
+  <div class="compressor-info" id="prodViewInfoBar" style="margin-top:10px;"></div>
+  <div id="prodViewContent"></div>
 </div>
 
 <!-- ========== ตั้งค่าระบบ (เปิดจากปุ่ม ⚙ มุมบนขวา) — รวม 3 เครื่องมือที่ย้ายมาจากเมนูแอดมิน ========== -->
@@ -3906,6 +3960,12 @@ function initProductionModule() {
     prodModuleLoaded = true;
     renderProdFormPicker();
     initProdSigCanvas();
+    const today = new Date(); const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
+    const pad = n => String(n).padStart(2,'0');
+    const fmt = d => d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+    document.getElementById('prodChartToDate').value = fmt(today);
+    document.getElementById('prodChartFromDate').value = fmt(weekAgo);
+    populateProdChartSeriesSelect();
   }
   loadProductionHistory({});
 }
@@ -4326,13 +4386,20 @@ function renderProductionHistory() {
     return '<div class="prod-hist-card">' +
       '<div class="prod-hist-title">' + escapeHtml(form ? form.title : g.report_type) + ' — ' + fmtProdDateShort(g.report_date) + '</div>' +
       '<div class="prod-hist-shifts">' + shiftBadges + '</div>' +
-      '<button class="export-btn-full" data-pdf-type="' + g.report_type + '" data-pdf-date="' + g.report_date + '">📄 Export PDF</button>' +
-      '</div>';
+      '<div class="prod-hist-card-actions">' +
+      '<button data-view-type="' + g.report_type + '" data-view-date="' + g.report_date + '">👁 ดูฟอร์ม</button>' +
+      '<button class="secondary" data-pdf-type="' + g.report_type + '" data-pdf-date="' + g.report_date + '">📄 Export PDF</button>' +
+      '</div></div>';
   }).join('');
 
   list.querySelectorAll('[data-pdf-type]').forEach(btn => {
     btn.addEventListener('click', function() {
       exportProductionDayPDF(this.dataset.pdfType, this.dataset.pdfDate);
+    });
+  });
+  list.querySelectorAll('[data-view-type]').forEach(btn => {
+    btn.addEventListener('click', function() {
+      openProductionView(this.dataset.viewType, this.dataset.viewDate);
     });
   });
 }
@@ -4342,6 +4409,254 @@ function fmtProdDateShort(dateStr) {
   const [y,m,d] = dateStr.split('-');
   return d + '/' + m + '/' + y;
 }
+
+/* ---------- chip-row toggle: รายการ / กราฟแนวโน้ม ---------- */
+document.querySelectorAll('#view-production-history .chip[data-histtab]').forEach(chip => {
+  chip.addEventListener('click', function() {
+    document.querySelectorAll('#view-production-history .chip[data-histtab]').forEach(c => c.classList.remove('active'));
+    this.classList.add('active');
+    document.getElementById('prodHistTabList').classList.toggle('active', this.dataset.histtab === 'list');
+    document.getElementById('prodHistTabChart').classList.toggle('active', this.dataset.histtab === 'chart');
+    if (this.dataset.histtab === 'chart') populateProdChartSeriesSelect();
+  });
+});
+
+/* ================================================================
+ * 9) ดูฟอร์มแบบเต็มหน้า (จากประวัติ) — read-only, รวมข้อมูลทั้ง 3 กะ
+ *    เข้าด้วยกันเหมือนฟอร์มกระดาษ ใช้ตรรกะรวมข้อมูลเดียวกับตอนสร้าง PDF
+ * ================================================================ */
+function prodViewCellDisplay(v) { return (v === '' || v === undefined || v === null) ? '<span style="color:var(--muted);">—</span>' : escapeHtml(v); }
+
+function renderProdSectionView(sec, shiftRows) {
+  let html = '<div class="prod-section-title">' + escapeHtml(sec.rowHeader) + '</div><div class="prod-grid-wrap"><table class="prod-grid"><thead>';
+
+  if (sec.type === 'checklist5') {
+    html += '<tr><th style="min-width:150px;">' + escapeHtml(sec.rowHeader) + '</th>' + sec.cols.map(c => '<th>' + escapeHtml(c) + '</th>').join('') + '</tr></thead><tbody>';
+    sec.rows.forEach(r => {
+      html += '<tr><td class="prod-row-label">' + escapeHtml(r.l) + ' (กะ ' + r.s + ')</td>' +
+        sec.cols.map(c => '<td>' + prodViewCellDisplay(mergedCellFromRows(shiftRows, r.s, sec.id, r.l, c)) + '</td>').join('') + '</tr>';
+    });
+    html += '</tbody>';
+
+  } else if (sec.type === 'checklistStd') {
+    html += '<tr><th style="min-width:150px;">รายการ</th><th>มาตรฐาน</th>' + ['A','B','C'].map(s => '<th colspan="2">กะ ' + s + '</th>').join('') + '</tr></thead><tbody>';
+    sec.rows.forEach(r => {
+      html += '<tr><td class="prod-row-label">' + escapeHtml(r.l) + '</td><td style="font-size:10.5px; color:var(--muted); white-space:normal;">' + escapeHtml(r.std) + '</td>' +
+        ['A','B','C'].map(s => '<td>' + prodViewCellDisplay(mergedCellFromRows(shiftRows,s,sec.id,r.l,'ix')) + '</td><td>' + prodViewCellDisplay(mergedCellFromRows(shiftRows,s,sec.id,r.l,'note')) + '</td>').join('') +
+        '</tr>';
+    });
+    html += '</tbody>';
+
+  } else if (sec.type === 'hourly24' || sec.type === 'checkpoint') {
+    html += '<tr><th style="min-width:150px;">' + escapeHtml(sec.rowHeader) + '</th>' + sec.hours.map(h => '<th>' + h + ':00</th>').join('') + '</tr></thead><tbody>';
+    sec.rows.forEach(r => {
+      html += '<tr><td class="prod-row-label">' + escapeHtml(r.l) + '</td>' +
+        sec.hours.map(h => '<td>' + prodViewCellDisplay(mergedCellFromRows(shiftRows, prodShiftOfHour(h), sec.id, r.l, h)) + '</td>').join('') + '</tr>';
+    });
+    html += '</tbody>';
+
+  } else if (sec.type === 'shiftFields') {
+    html += '<tr><th style="min-width:150px;">' + escapeHtml(sec.rowHeader) + '</th>' + ['A','B','C'].map(s => '<th colspan="' + sec.fields.length + '">กะ ' + s + '</th>').join('') + '</tr>' +
+      '<tr><th></th>' + ['A','B','C'].map(() => sec.fields.map(f => '<th style="font-size:9.5px;">' + escapeHtml(f) + '</th>').join('')).join('') + '</tr></thead><tbody>';
+    sec.rows.forEach(r => {
+      const nFields = r.single ? 1 : (r.noLastField ? sec.fields.length - 1 : sec.fields.length);
+      let cells = '';
+      ['A','B','C'].forEach(s => {
+        for (let i = 0; i < sec.fields.length; i++) {
+          cells += i < nFields ? ('<td>' + prodViewCellDisplay(mergedCellFromRows(shiftRows, s, sec.id, r.l, 'f'+i)) + '</td>') : '<td style="color:var(--muted);">-</td>';
+        }
+      });
+      html += '<tr><td class="prod-row-label">' + escapeHtml(r.l) + '</td>' + cells + '</tr>';
+    });
+    html += '</tbody>';
+
+  } else if (sec.type === 'highReceiver') {
+    html += '<tr><th style="min-width:130px;">High reciever</th>' + ['A','B','C'].map(s => '<th colspan="2">กะ ' + s + '</th>').join('') +
+      (sec.crustFreezerRows ? ('<th>Crust Freezer</th>' + ['A','B','C'].map(s => '<th colspan="2">กะ ' + s + '</th>').join('')) : '') + '</tr>' +
+      '<tr><th></th>' + ['A','B','C'].map(() => '<th>Discharge P.</th><th>ระดับ</th>').join('') +
+      (sec.crustFreezerRows ? ('<th></th>' + ['A','B','C'].map(() => '<th>เวลาเดินเครื่อง</th><th>Temp</th>').join('')) : '') +
+      '</tr></thead><tbody>';
+    sec.rows.forEach((label, idx) => {
+      let row = '<tr><td class="prod-row-label">' + escapeHtml(label) + '</td>';
+      ['A','B','C'].forEach(s => {
+        row += '<td>' + prodViewCellDisplay(mergedCellFromRows(shiftRows,s,sec.id,label,'dp')) + '</td><td>' + prodViewCellDisplay(mergedCellFromRows(shiftRows,s,sec.id,label,'lvl')) + '</td>';
+      });
+      if (sec.crustFreezerRows) {
+        const cfLabel = sec.crustFreezerRows[idx] || '';
+        row += '<td class="prod-row-label">' + escapeHtml(cfLabel) + '</td>';
+        ['A','B','C'].forEach(s => {
+          row += '<td>' + prodViewCellDisplay(mergedCellFromRows(shiftRows,s,sec.id,'cf_'+cfLabel,'time')) + '</td><td>' + prodViewCellDisplay(mergedCellFromRows(shiftRows,s,sec.id,'cf_'+cfLabel,'temp')) + '</td>';
+        });
+      }
+      row += '</tr>';
+      html += row;
+    });
+    html += '</tbody>';
+  }
+
+  html += '</table></div>';
+  return html;
+}
+
+let prodViewCurrent = null; // { reportType, dateStr } — จำไว้เผื่อกด Export PDF จากหน้านี้
+
+function openProductionView(reportType, dateStr) {
+  const form = PROD_FORMS[reportType];
+  if (!form) return;
+  const rows = prodHistoryRowsRaw.filter(r => r.report_type === reportType && r.report_date === dateStr);
+  const shiftRows = { A: null, B: null, C: null };
+  rows.forEach(r => { shiftRows[r.shift] = r; });
+  prodViewCurrent = { reportType, dateStr };
+
+  document.getElementById('prodViewInfoBar').innerHTML =
+    '<div><b>' + escapeHtml(form.title) + '</b><br><span style="font-size:11px;">' + escapeHtml(form.docNo) + ' — วันที่ ' + fmtProdDateShort(dateStr) + '</span></div>';
+
+  const content = document.getElementById('prodViewContent');
+  content.innerHTML = form.sections.map(sec => renderProdSectionView(sec, shiftRows)).join('');
+
+  let sigHtml = '<div class="prod-view-sig-row">';
+  ['A','B','C'].forEach(s => {
+    const row = shiftRows[s];
+    sigHtml += '<div class="slot">';
+    sigHtml += row && row.signature_data ? ('<img src="' + row.signature_data + '">') : '<div class="empty-sig">ยังไม่เซ็น</div>';
+    sigHtml += '<div class="cap">' + PROD_SHIFT_LABEL[s] + (row ? (' — ' + escapeHtml(row.employee_name || '')) : '') + '</div></div>';
+  });
+  sigHtml += '</div>';
+  content.innerHTML += sigHtml;
+
+  showView('view-production-view');
+}
+document.getElementById('prodViewBackBtn').addEventListener('click', () => showView('view-production-history'));
+document.getElementById('prodViewExportBtn').addEventListener('click', () => {
+  if (prodViewCurrent) exportProductionDayPDF(prodViewCurrent.reportType, prodViewCurrent.dateStr);
+});
+
+/* ================================================================
+ * 10) กราฟแนวโน้มค่าตัวเลขย้อนหลัง — เลือกฟอร์ม+รายการ แล้ว plot ค่าเฉลี่ย
+ *    ต่อวัน (เฉลี่ยจากทุกกะ/ทุกช่วงเวลาที่มีข้อมูลในวันนั้น)
+ * ================================================================ */
+function buildProdNumericSeriesList(form) {
+  const list = [];
+  form.sections.forEach(sec => {
+    if (sec.type === 'hourly24' || sec.type === 'checkpoint') {
+      sec.rows.forEach(r => list.push({ sectionId: sec.id, rowKey: r.l, colKey: null, label: sec.rowHeader + ' — ' + r.l }));
+    } else if (sec.type === 'shiftFields') {
+      sec.rows.forEach(r => {
+        const nFields = r.single ? 1 : (r.noLastField ? sec.fields.length - 1 : sec.fields.length);
+        for (let i = 0; i < nFields; i++) {
+          list.push({ sectionId: sec.id, rowKey: r.l, colKey: 'f'+i, label: r.l + ' — ' + sec.fields[i] });
+        }
+      });
+    } else if (sec.type === 'highReceiver') {
+      sec.rows.forEach(label => {
+        list.push({ sectionId: sec.id, rowKey: label, colKey: 'dp', label: label + ' — Discharge P.' });
+        list.push({ sectionId: sec.id, rowKey: label, colKey: 'lvl', label: label + ' — ระดับ' });
+      });
+      if (sec.crustFreezerRows) {
+        sec.crustFreezerRows.forEach(cf => list.push({ sectionId: sec.id, rowKey: 'cf_'+cf, colKey: 'temp', label: cf + ' — Temp' }));
+      }
+    }
+    // checklist5 (I/X) และ checklistStd (ปกติ/ผิดปกติ+หมายเหตุ) ไม่ใช่ค่าตัวเลข ไม่รวมในกราฟ
+  });
+  return list;
+}
+
+function populateProdChartSeriesSelect() {
+  const formKey = document.getElementById('prodChartFormSelect').value;
+  const form = PROD_FORMS[formKey];
+  const sel = document.getElementById('prodChartSeriesSelect');
+  const list = buildProdNumericSeriesList(form);
+  sel.innerHTML = list.map((s, i) => '<option value="' + i + '">' + escapeHtml(s.label) + '</option>').join('');
+  sel.dataset.seriesJson = JSON.stringify(list);
+}
+document.getElementById('prodChartFormSelect').addEventListener('change', populateProdChartSeriesSelect);
+
+let prodTrendChartInstance = null;
+document.getElementById('prodChartGenerateBtn').addEventListener('click', function() {
+  const formKey = document.getElementById('prodChartFormSelect').value;
+  const seriesList = JSON.parse(document.getElementById('prodChartSeriesSelect').dataset.seriesJson || '[]');
+  const seriesIdx = Number(document.getElementById('prodChartSeriesSelect').value);
+  const series = seriesList[seriesIdx];
+  const fromDateStr = document.getElementById('prodChartFromDate').value;
+  const toDateStr = document.getElementById('prodChartToDate').value;
+  if (!series) { alert('กรุณาเลือกรายการที่จะดูกราฟ'); return; }
+  if (!fromDateStr || !toDateStr) { alert('กรุณาเลือกช่วงวันที่'); return; }
+
+  const btn = this;
+  const originalText = btn.textContent;
+  btn.disabled = true; btn.textContent = 'กำลังโหลด...';
+
+  withRetry(() => getSbClient().from('production_reports').select('*')
+    .eq('report_type', formKey).gte('report_date', fromDateStr).lte('report_date', toDateStr)
+    .order('report_date', { ascending: true })
+  ).then(({ data, error }) => {
+    btn.disabled = false; btn.textContent = originalText;
+    if (error) { alert('เกิดข้อผิดพลาด: ' + error.message); return; }
+    if (!data || !data.length) { alert('ไม่พบข้อมูลในช่วงวันที่เลือก'); return; }
+    renderProdTrendChart(data, series);
+  }).catch(err => { btn.disabled=false; btn.textContent=originalText; alert('เชื่อมต่อไม่ได้: '+(err.message||err)); });
+});
+
+function renderProdTrendChart(rows, series) {
+  const byDate = {};
+  rows.forEach(r => { if (!byDate[r.report_date]) byDate[r.report_date] = []; byDate[r.report_date].push(r); });
+  const dates = Object.keys(byDate).sort();
+
+  const values = dates.map(d => {
+    const dayRows = byDate[d];
+    let vals = [];
+    dayRows.forEach(row => {
+      if (!row.data || !row.data[series.sectionId] || !row.data[series.sectionId][series.rowKey]) return;
+      const cellObj = row.data[series.sectionId][series.rowKey];
+      if (series.colKey) {
+        const n = parseFloat(cellObj[series.colKey]);
+        if (!isNaN(n)) vals.push(n);
+      } else {
+        Object.values(cellObj).forEach(v => { const n = parseFloat(v); if (!isNaN(n)) vals.push(n); });
+      }
+    });
+    return vals.length ? (vals.reduce((a,b)=>a+b,0) / vals.length) : null;
+  });
+
+  const ctx = document.getElementById('prodTrendChart').getContext('2d');
+  if (prodTrendChartInstance) prodTrendChartInstance.destroy();
+  prodTrendChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: { labels: dates.map(fmtProdDateShort), datasets: [{
+      label: series.label,
+      data: values,
+      borderColor: CHART_COLORS[0],
+      backgroundColor: CHART_COLORS[0],
+      tension: 0.25, spanGaps: true, pointRadius: 3, pointHoverRadius: 5, borderWidth: 2
+    }] },
+    options: {
+      responsive: true,
+      devicePixelRatio: 3,
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        title: { display:true, text: series.label + ' (ค่าเฉลี่ยต่อวัน)', font:{size:14,weight:'bold'}, padding:{bottom:12} },
+        legend: { display:false },
+        datalabels: { display: dates.length <= 60, align:'top', anchor:'end', font:{size:9,weight:'600'}, color:'#333', formatter: v => (v===null||v===undefined)?'':Math.round(v*100)/100 }
+      },
+      scales: {
+        x: { ticks:{font:{size:9.5}, maxRotation:60, minRotation:40} },
+        y: { type:'linear' }
+      }
+    },
+    plugins: [ChartDataLabels]
+  });
+  document.getElementById('prodChartResultWrap').style.display = 'block';
+  document.getElementById('prodChartResultWrap').scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+document.getElementById('prodChartDownloadBtn').addEventListener('click', () => {
+  if (!prodTrendChartInstance) return;
+  const url = prodTrendChartInstance.toBase64Image('image/png', 1);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'production_trend_' + new Date().toISOString().slice(0,10) + '.png';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+});
 
 /* ================================================================
  * 8) Export PDF — ใช้ jsPDF + jsPDF-AutoTable วาด PDF ตรงๆ (ไม่ผ่าน HTML/canvas
