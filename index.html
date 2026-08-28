@@ -4802,9 +4802,9 @@ function openProductionView(reportType, dateStr) {
       sigHtml += '<div class="empty-sig">ยังไม่มีใครบันทึก</div>';
     } else {
       contributors.forEach(c => {
-        sigHtml += '<div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">';
-        sigHtml += c.signature_data ? ('<img src="' + c.signature_data + '" style="height:34px; background:var(--panel2); border-radius:4px;">') : '<div class="empty-sig" style="width:70px; height:34px; font-size:9px;">ไม่มีลายเซ็น</div>';
-        sigHtml += '<span class="cap">' + escapeHtml(c.emp_name || '') + '</span></div>';
+        sigHtml += '<div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">';
+        sigHtml += c.signature_data ? ('<img src="' + c.signature_data + '" style="height:52px; background:var(--panel2); border-radius:4px;">') : '<div class="empty-sig" style="width:100px; height:52px; font-size:10px;">ไม่มีลายเซ็น</div>';
+        sigHtml += '<span class="cap" style="font-size:15px; font-weight:600; color:var(--text);">' + escapeHtml(c.emp_name || '') + '</span></div>';
       });
     }
     if (row && isAdminUnlocked()) {
@@ -5178,21 +5178,21 @@ function drawPdfFooter(doc, form, shiftRows, y) {
     const x = PDF_MARGIN + i * colW;
     const row = shiftRows[s];
     const contributors = (row && Array.isArray(row.contributors)) ? row.contributors : [];
-    let cy = y + 34;
-    doc.setFont('Sarabun', 'bold'); doc.setFontSize(7.5); doc.setTextColor(20,20,20);
+    let cy = y + 36;
+    doc.setFont('Sarabun', 'bold'); doc.setFontSize(8.5); doc.setTextColor(20,20,20);
     doc.text('กะ' + PROD_SHIFT_LABEL[s], x, cy);
-    cy += 10;
+    cy += 16;
     if (!contributors.length) {
-      doc.setFont('Sarabun', 'normal'); doc.setFontSize(6.6); doc.setTextColor(120,120,120);
+      doc.setFont('Sarabun', 'normal'); doc.setFontSize(7.5); doc.setTextColor(120,120,120);
       doc.text('(ยังไม่มีใครบันทึก)', x, cy);
     } else {
       contributors.forEach(c => {
         if (c.signature_data) {
-          try { doc.addImage(c.signature_data, 'PNG', x, cy - 8, 44, 15); } catch (e) { /* ข้ามถ้าภาพเสีย */ }
+          try { doc.addImage(c.signature_data, 'PNG', x, cy - 15, 70, 26); } catch (e) { /* ข้ามถ้าภาพเสีย */ }
         }
-        doc.setFont('Sarabun', 'normal'); doc.setFontSize(6.6); doc.setTextColor(60,60,60);
-        doc.text(c.emp_name || '', x + 48, cy);
-        cy += 17;
+        doc.setFont('Sarabun', 'normal'); doc.setFontSize(9); doc.setTextColor(40,40,40);
+        doc.text(c.emp_name || '', x + 76, cy);
+        cy += 30;
       });
     }
   });
