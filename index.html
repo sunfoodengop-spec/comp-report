@@ -380,6 +380,7 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
   .prod-hist-card-actions { display:flex; gap:8px; }
   .prod-hist-card-actions button { flex:1; padding:9px; border-radius:8px; border:1px solid var(--accent); background:var(--panel); color:var(--accent); font-weight:700; font-size:12.5px; cursor:pointer; }
   .prod-hist-card-actions button.secondary { border-color:var(--border); color:var(--text); }
+  .prod-hist-card-actions button.danger { border-color:var(--red); color:var(--red); flex:0 0 auto; padding-left:12px; padding-right:12px; }
   .prod-view-sig-row { display:flex; gap:22px; flex-wrap:wrap; margin-top:16px; padding-top:14px; border-top:1px dashed var(--border); }
   .prod-view-sig-row .slot { display:flex; flex-direction:column; align-items:center; gap:4px; }
   .prod-view-sig-row .slot img { height:44px; background:var(--panel2); border-radius:6px; }
@@ -4225,7 +4226,7 @@ function loadProdDayRows() {
   const dateStr = document.getElementById('prodDateInput').value;
   if (!dateStr || !prodFormKey) return Promise.resolve();
   return withRetry(() => getSbClient().from('production_reports').select('*')
-    .eq('report_type', prodFormKey).eq('report_date', dateStr)
+    .eq('report_type', prodFormKey).eq('report_date', dateStr).eq('is_active', true)
   ).then(({ data, error }) => {
     if (error) throw new Error(error.message);
     prodDataByShift = { A:{}, B:{}, C:{} };
@@ -4314,6 +4315,7 @@ document.getElementById('prodSubmitBtn').addEventListener('click', function() {
     data: prodDataByShift[prodShift],
     note: prodNoteByShift[prodShift] || null,
     signature_data: signatureDataUrl,
+    is_active: true,
     client_request_id: 'preq_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10)
   };
 
@@ -4345,7 +4347,7 @@ document.getElementById('prodSubmitBtn').addEventListener('click', function() {
 let prodHistoryRowsRaw = [];
 function loadProductionHistory(opts) {
   const range = document.getElementById('prodHistRangeFilter') ? document.getElementById('prodHistRangeFilter').value : '30';
-  let q = getSbClient().from('production_reports').select('*').order('report_date', { ascending: false });
+  let q = getSbClient().from('production_reports').select('*').eq('is_active', true).order('report_date', { ascending: false });
   if (range !== 'all') {
     const d = new Date(); d.setDate(d.getDate() - Number(range));
     q = q.gte('report_date', d.toISOString().slice(0,10));
@@ -4383,12 +4385,16 @@ function renderProductionHistory() {
       const done = !!g.shifts[s];
       return '<div class="prod-hist-shift-badge' + (done?' done':'') + '">' + PROD_SHIFT_LABEL[s] + (done ? ' ✅' : ' —') + '</div>';
     }).join('');
+    const deleteBtn = isAdminUnlocked()
+      ? '<button class="danger" data-del-type="' + g.report_type + '" data-del-date="' + g.report_date + '">🗑 ลบ</button>'
+      : '';
     return '<div class="prod-hist-card">' +
       '<div class="prod-hist-title">' + escapeHtml(form ? form.title : g.report_type) + ' — ' + fmtProdDateShort(g.report_date) + '</div>' +
       '<div class="prod-hist-shifts">' + shiftBadges + '</div>' +
       '<div class="prod-hist-card-actions">' +
       '<button data-view-type="' + g.report_type + '" data-view-date="' + g.report_date + '">👁 ดูฟอร์ม</button>' +
       '<button class="secondary" data-pdf-type="' + g.report_type + '" data-pdf-date="' + g.report_date + '">📄 Export PDF</button>' +
+      deleteBtn +
       '</div></div>';
   }).join('');
 
@@ -4402,12 +4408,34 @@ function renderProductionHistory() {
       openProductionView(this.dataset.viewType, this.dataset.viewDate);
     });
   });
+  list.querySelectorAll('[data-del-type]').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const reportType = this.dataset.delType;
+      const dateStr = this.dataset.delDate;
+      const form = PROD_FORMS[reportType];
+      const ids = prodHistoryRowsRaw.filter(r => r.report_type === reportType && r.report_date === dateStr).map(r => r.id);
+      if (!confirm('ยืนยันลบบันทึก "' + (form ? form.title : reportType) + ' — ' + fmtProdDateShort(dateStr) + '" ทั้งหมด (' + ids.length + ' กะ)?\n\nการลบนี้จะไม่แสดงในระบบอีก แต่ข้อมูลยังกู้คืนได้จากฐานข้อมูลถ้าจำเป็น')) return;
+      deleteProductionRows(ids);
+    });
+  });
 }
 
 function fmtProdDateShort(dateStr) {
   if (!dateStr) return '';
   const [y,m,d] = dateStr.split('-');
   return d + '/' + m + '/' + y;
+}
+
+/* ---------- ลบบันทึกผลผลิต (แอดมินเท่านั้น) — soft delete (is_active=false) ไม่ hard-delete ---------- */
+function deleteProductionRows(ids, doneMsg) {
+  if (!ids.length) return;
+  withRetry(() => getSbClient().from('production_reports').update({ is_active: false }).in('id', ids))
+    .then(({ error }) => {
+      if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+      if (doneMsg) alert(doneMsg);
+      loadProductionHistory({});
+    })
+    .catch(err => alert('เชื่อมต่อไม่ได้: ' + (err.message || err)));
 }
 
 /* ---------- chip-row toggle: รายการ / กราฟแนวโน้ม ---------- */
@@ -4519,10 +4547,22 @@ function openProductionView(reportType, dateStr) {
     const row = shiftRows[s];
     sigHtml += '<div class="slot">';
     sigHtml += row && row.signature_data ? ('<img src="' + row.signature_data + '">') : '<div class="empty-sig">ยังไม่เซ็น</div>';
-    sigHtml += '<div class="cap">' + PROD_SHIFT_LABEL[s] + (row ? (' — ' + escapeHtml(row.employee_name || '')) : '') + '</div></div>';
+    sigHtml += '<div class="cap">' + PROD_SHIFT_LABEL[s] + (row ? (' — ' + escapeHtml(row.employee_name || '')) : '') + '</div>';
+    if (row && isAdminUnlocked()) {
+      sigHtml += '<button type="button" class="prod-shift-del-btn" data-del-id="' + row.id + '" data-del-shift="' + s + '" style="margin-top:4px; font-size:10.5px; color:var(--red); background:none; border:1px solid var(--red); border-radius:6px; padding:3px 8px; cursor:pointer;">🗑 ลบกะนี้</button>';
+    }
+    sigHtml += '</div>';
   });
   sigHtml += '</div>';
   content.innerHTML += sigHtml;
+
+  content.querySelectorAll('.prod-shift-del-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      if (!confirm('ยืนยันลบข้อมูลกะ' + PROD_SHIFT_LABEL[this.dataset.delShift] + ' ของวันนี้?')) return;
+      deleteProductionRows([this.dataset.delId]);
+      showView('view-production-history');
+    });
+  });
 
   showView('view-production-view');
 }
@@ -4587,7 +4627,7 @@ document.getElementById('prodChartGenerateBtn').addEventListener('click', functi
   btn.disabled = true; btn.textContent = 'กำลังโหลด...';
 
   withRetry(() => getSbClient().from('production_reports').select('*')
-    .eq('report_type', formKey).gte('report_date', fromDateStr).lte('report_date', toDateStr)
+    .eq('report_type', formKey).eq('is_active', true).gte('report_date', fromDateStr).lte('report_date', toDateStr)
     .order('report_date', { ascending: true })
   ).then(({ data, error }) => {
     btn.disabled = false; btn.textContent = originalText;
