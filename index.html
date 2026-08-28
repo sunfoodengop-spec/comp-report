@@ -9,6 +9,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   :root {
     /* โทนสบายตา: ขาวนวล 60% / เลือดหมู 30% / เทาเข้ม 10% */
@@ -337,6 +339,55 @@
   .module-card-title { font-weight:800; font-size:15px; color:var(--text); margin-bottom:3px; }
   .module-card-desc { font-size:12px; color:var(--muted); line-height:1.5; }
   .module-card-arrow { font-size:24px; color:var(--accent); flex-shrink:0; }
+
+  /* ---------- โมดูล: รายงานผลผลิต (Production Report) ---------- */
+  .prod-shift-tabs { display:flex; gap:8px; margin-bottom:16px; }
+  .prod-shift-tab { flex:1; text-align:center; padding:11px 6px; border-radius:10px; border:1.5px solid var(--border); background:var(--panel2); color:var(--muted); font-weight:700; font-size:13px; cursor:pointer; }
+  .prod-shift-tab.active { background:var(--accent); border-color:var(--accent); color:#FFFFFF; }
+  .prod-shift-tab .psub { display:block; font-size:10.5px; font-weight:400; opacity:0.85; margin-top:2px; }
+  .prod-section-title { font-weight:800; font-size:13px; color:#FFFFFF; background:var(--accent); padding:9px 12px; border-radius:8px 8px 0 0; margin-top:18px; }
+  .prod-section-title .pnote { font-weight:400; font-size:11px; opacity:0.85; }
+  .prod-grid-wrap { overflow-x:auto; border:1px solid var(--border); border-radius:0 0 8px 8px; background:var(--panel); box-shadow:var(--shadow); margin-bottom:4px; }
+  .prod-grid { border-collapse:collapse; font-size:11.5px; white-space:nowrap; width:100%; }
+  .prod-grid th, .prod-grid td { border:1px solid var(--border); padding:5px 6px; text-align:center; }
+  .prod-grid thead th { background:var(--dark-soft); color:var(--text); font-weight:700; position:sticky; top:0; z-index:2; font-size:11px; }
+  .prod-grid td.prod-row-label { text-align:left; font-weight:600; white-space:normal; min-width:130px; position:sticky; left:0; background:var(--panel); z-index:1; }
+  .prod-grid .prod-std { font-size:10px; color:var(--muted); font-weight:400; display:block; }
+  .prod-ix-toggle { display:flex; gap:3px; justify-content:center; }
+  .prod-ix-btn { width:26px; height:26px; border-radius:6px; border:1px solid var(--border); background:var(--panel2); color:var(--muted); font-weight:800; font-size:12px; cursor:pointer; }
+  .prod-ix-btn[data-val="I"].sel { background:var(--dark); border-color:var(--dark); color:#FFFFFF; }
+  .prod-ix-btn[data-val="X"].sel { background:var(--red); border-color:var(--red); color:#FFFFFF; }
+  .prod-grid input[type="text"], .prod-grid input[type="number"] { width:64px; padding:5px 4px; border-radius:6px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:11.5px; text-align:center; }
+  .prod-grid input.filled { border-color:var(--accent); background:var(--accent-soft); }
+  .prod-note-input { width:100px !important; }
+  .prod-sig-card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; box-shadow:var(--shadow); margin-top:18px; }
+  .prod-sig-canvas-wrap { border:1.5px dashed var(--border); border-radius:10px; background:var(--panel2); touch-action:none; }
+  .prod-sig-canvas-wrap canvas { display:block; width:100%; height:140px; touch-action:none; }
+  .prod-sig-actions { display:flex; gap:8px; margin-top:8px; }
+  .prod-sig-actions button { flex:1; padding:9px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-weight:700; font-size:12.5px; cursor:pointer; }
+  .prod-form-select-badge { display:inline-block; font-size:10.5px; font-weight:700; padding:2px 8px; border-radius:10px; margin-left:6px; }
+  .prod-hist-card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:12px; box-shadow:var(--shadow); }
+  .prod-hist-title { font-weight:800; font-size:14px; color:var(--text); margin-bottom:8px; }
+  .prod-hist-shifts { display:flex; gap:8px; margin-bottom:10px; }
+  .prod-hist-shift-badge { flex:1; text-align:center; padding:6px 4px; border-radius:8px; font-size:11.5px; font-weight:700; background:var(--panel2); color:var(--muted); border:1px solid var(--border); }
+  .prod-hist-shift-badge.done { background:#E5F3EA; color:#2F6B45; border-color:rgba(47,107,69,0.3); }
+  .prod-fill-warn { font-size:11.5px; color:var(--accent); background:var(--accent-soft); border-radius:8px; padding:8px 10px; margin:10px 0; display:none; }
+
+  /* ---------- Print template สำหรับ Export PDF (ซ่อนไว้นอกจอ, rasterize ด้วย html2canvas) ---------- */
+  #prodPrintRoot { position:fixed; left:-99999px; top:0; width:1600px; background:#FFFFFF; padding:22px; font-family:"Segoe UI","Sarabun",Tahoma,sans-serif; color:#1A1A1A; }
+  .pf-page { width:1556px; }
+  .pf-headrow { display:flex; justify-content:space-between; align-items:flex-end; font-size:16px; font-weight:700; margin-bottom:4px; }
+  .pf-headrow .c { font-weight:400; font-size:15px; }
+  .pf-bar { background:#3A3532; color:#FFFFFF; font-weight:700; text-align:center; padding:6px 0; font-size:12.5px; margin-top:12px; }
+  .pf-table { border-collapse:collapse; width:100%; table-layout:fixed; margin-top:2px; }
+  .pf-table th, .pf-table td { border:1px solid #333333; padding:3px 3px; font-size:10px; text-align:center; overflow:hidden; word-break:break-word; }
+  .pf-table th.pf-label, .pf-table td.pf-label { text-align:left; white-space:normal; font-weight:600; }
+  .pf-vert { writing-mode:vertical-rl; text-orientation:mixed; height:64px; font-weight:400; }
+  .pf-sig { margin-top:14px; font-size:12.5px; display:flex; align-items:flex-end; gap:22px; flex-wrap:wrap; }
+  .pf-sig .slot { display:inline-flex; flex-direction:column; align-items:center; }
+  .pf-sig .slot img { height:34px; }
+  .pf-sig .slot .cap { font-size:10.5px; color:#444444; margin-top:2px; }
+  .pf-footnote { font-size:11.5px; margin-top:10px; }
 </style>
 </head>
 <body>
@@ -394,6 +445,14 @@
       <div class="module-card-body">
         <div class="module-card-title">รายงานผลผลิตน้ำเย็น</div>
         <div class="module-card-desc">บันทึกข้อมูลระบบ Ripple Plate 4 ระบบ และสถานะแท็งก์น้ำเย็น</div>
+      </div>
+      <div class="module-card-arrow">›</div>
+    </div>
+    <div class="module-card" data-module="production" id="productionModuleCard">
+      <div class="module-card-icon">📋</div>
+      <div class="module-card-body">
+        <div class="module-card-title">รายงานผลผลิต (จดเครื่องห้องคอม)</div>
+        <div class="module-card-desc">บันทึกฟอร์มห้องคอม 5,2 / 4,6 / 3 แบบดิจิทัล พร้อมเซ็นชื่อและ Export PDF</div>
       </div>
       <div class="module-card-arrow">›</div>
     </div>
@@ -679,6 +738,71 @@
   <div id="waterHistoryList"><div class="loading-text">กำลังโหลด...</div></div>
 </div>
 
+<!-- ========== PRODUCTION MODULE: บันทึกค่า ========== -->
+<div class="view" id="view-production-log">
+  <div id="prodLogSuccess"></div>
+
+  <div class="section-title">เลือกฟอร์ม</div>
+  <div id="prodFormPicker"></div>
+
+  <div id="prodFormBody" style="display:none;">
+    <div class="compressor-info" id="prodFormInfoBar" style="display:flex; align-items:center; justify-content:space-between; gap:10px;"></div>
+
+    <div class="section-title">ข้อมูลผู้กรอก / วันที่ / กะ</div>
+    <div class="field">
+      <label>ชื่อ-รหัสพนักงาน</label>
+      <select id="prodEmpSelect"><option value="">-- เลือกพนักงาน --</option></select>
+    </div>
+    <div class="field">
+      <label>วันที่</label>
+      <input type="date" id="prodDateInput">
+    </div>
+
+    <div class="prod-shift-tabs" id="prodShiftTabs">
+      <div class="prod-shift-tab" data-shift="A">เช้า<span class="psub">09:00–16:00</span></div>
+      <div class="prod-shift-tab" data-shift="B">บ่าย<span class="psub">17:00–00:00</span></div>
+      <div class="prod-shift-tab" data-shift="C">ดึก<span class="psub">01:00–08:00</span></div>
+    </div>
+
+    <div class="prod-fill-warn" id="prodFillWarn"></div>
+
+    <div id="prodSectionsWrap"></div>
+
+    <div class="field" style="margin-top:16px;">
+      <label>หมายเหตุ (ถ้ามี)</label>
+      <textarea id="prodNoteField" placeholder="เช่น เครื่องหยุดซ่อมช่วงบ่าย ฯลฯ"></textarea>
+    </div>
+
+    <div class="prod-sig-card">
+      <div class="section-title" style="margin-top:0;">ลายเซ็นผู้กรอก (กะที่กำลังบันทึก)</div>
+      <div class="prod-sig-canvas-wrap"><canvas id="prodSigCanvas"></canvas></div>
+      <div class="prod-sig-actions">
+        <button type="button" id="prodSigClearBtn">🗑 ล้างลายเซ็น</button>
+      </div>
+    </div>
+
+    <button class="submit-btn" id="prodSubmitBtn" style="margin-top:16px;">✅ บันทึก + เซ็นชื่อกะนี้</button>
+  </div>
+</div>
+
+<!-- ========== PRODUCTION MODULE: ประวัติ ========== -->
+<div class="view" id="view-production-history">
+  <div class="filter-bar">
+    <select id="prodHistFormFilter">
+      <option value="">ทุกฟอร์ม</option>
+      <option value="comp_52">ห้องคอม 5,2</option>
+      <option value="comp_46">ห้องคอม 4,6</option>
+      <option value="comp_3">ห้องคอม 3</option>
+    </select>
+    <select id="prodHistRangeFilter">
+      <option value="7">7 วันล่าสุด</option>
+      <option value="30" selected>30 วันล่าสุด</option>
+      <option value="all">ทั้งหมด</option>
+    </select>
+  </div>
+  <div id="prodHistoryList"><div class="loading-text">กำลังโหลด...</div></div>
+</div>
+
 <!-- ========== ตั้งค่าระบบ (เปิดจากปุ่ม ⚙ มุมบนขวา) — รวม 3 เครื่องมือที่ย้ายมาจากเมนูแอดมิน ========== -->
 <div class="view" id="view-settings-tools">
   <div class="pin-gate" id="toolsPinGate">
@@ -757,6 +881,8 @@
     <button class="navbtn module-btn module-compressor" data-view="view-history"><span class="ic">📋</span>ประวัติ</button>
     <button class="navbtn module-btn module-water" data-view="view-water-log" style="display:none;"><span class="ic">📝</span>บันทึกค่า</button>
     <button class="navbtn module-btn module-water" data-view="view-water-history" style="display:none;"><span class="ic">📋</span>ประวัติ</button>
+    <button class="navbtn module-btn module-production" data-view="view-production-log" style="display:none;"><span class="ic">📝</span>บันทึกค่า</button>
+    <button class="navbtn module-btn module-production" data-view="view-production-history" style="display:none;"><span class="ic">📋</span>ประวัติ</button>
     <button class="navbtn" data-view="view-admin"><span class="ic">🔐</span>แอดมิน</button>
   </div>
 </nav>
@@ -2774,6 +2900,7 @@ function selectSite(dept, pushState) {
   localStorage.setItem('current_department', dept);
   document.getElementById('siteModulesTitle').textContent = dept + ' — เลือกโมดูลที่จะใช้งาน';
   document.getElementById('waterModuleCard').style.display = dept === 'SFO' ? 'flex' : 'none';
+  document.getElementById('productionModuleCard').style.display = dept === 'SFO' ? 'flex' : 'none';
   document.getElementById('bottomNav').style.display = 'none';
   document.querySelectorAll('.navbtn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -2798,7 +2925,7 @@ function setModule(mod, pushState) {
     b.style.display = b.classList.contains('module-' + mod) ? 'flex' : 'none';
   });
   document.getElementById('bottomNav').style.display = 'flex';
-  document.getElementById('appTitle').textContent = (currentDepartment ? currentDepartment + ' · ' : '') + (mod === 'water' ? '💧 รายงานผลผลิตน้ำเย็น' : '🌀 บันทึกค่า Compressor');
+  document.getElementById('appTitle').textContent = (currentDepartment ? currentDepartment + ' · ' : '') + (mod === 'water' ? '💧 รายงานผลผลิตน้ำเย็น' : mod === 'production' ? '📋 รายงานผลผลิต' : '🌀 บันทึกค่า Compressor');
 
   if (mod === 'compressor') {
     populateCompressorSelects();
@@ -2808,6 +2935,9 @@ function setModule(mod, pushState) {
     renderCompInfo(); renderParamFields();
     showView('view-log');
     renderTechStatusBar();
+  } else if (mod === 'production') {
+    showView('view-production-log');
+    initProductionModule();
   } else {
     showView('view-water-log');
     initWaterModule(); renderWaterTechStatusBar();
@@ -3656,6 +3786,737 @@ document.getElementById('waterChartDownloadBtn').addEventListener('click', () =>
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 });
 
+/* ================================================================
+ * MODULE: รายงานผลผลิต (Production Report — ห้องคอม 5,2 / 4,6 / 3)
+ * ใช้ FORM_DEFS เป็น single source of truth ทั้งหน้ากรอกข้อมูล (edit)
+ * และหน้าที่ใช้พิมพ์เป็น PDF (print) — กันข้อมูลไม่ตรงกันระหว่าง 2 โหมด
+ * ================================================================ */
+
+const PROD_SHIFT_LABEL = { A: 'เช้า', B: 'บ่าย', C: 'ดึก' };
+// ช่วงชั่วโมงที่ถือว่าเป็นของกะไหน ใช้หลักเดียวกับ ROUND_HOURS_BY_SHIFT ของระบบเดิม
+// (กะ A ครอบคลุมรอบ 9,12,15 / กะ B ครอบคลุมรอบ 18,21,0 / กะ C ครอบคลุมรอบ 3,6)
+const PROD_SHIFT_HOURLY = { A: [9,10,11,12,13,14,15,16], B: [17,18,19,20,21,22,23,0], C: [1,2,3,4,5,6,7,8] };
+function prodShiftOfHour(h) {
+  if (PROD_SHIFT_HOURLY.A.indexOf(h) !== -1) return 'A';
+  if (PROD_SHIFT_HOURLY.B.indexOf(h) !== -1) return 'B';
+  return 'C';
+}
+
+/* ---------- รายชื่อ 64 รายการตรวจเช็คแอร์ในไลน์ ของฟอร์ม comp_52 (4 บล็อก x 16 แถว ในกระดาษ) ---------- */
+const COMP52_AIRLINE_ROWS = [
+  ['โม่เกลือ #1','A'],['โม่เกลือ #2','A'],['Injector #15','A'],['โม่น้อย #14','A'],
+  ['SC2 #12','A'],['SC2 #13','A'],['AC#45','A'],['AC#46','A'],['AC#47','A'],
+  ['Glycol #1','A'],['Glycol #2','A'],['Glycol #3','A'],['Glycol #4','A'],['Glycol #5','A'],['Glycol #6','A'],['Glycol #7','A'],
+  ['Glycol #8','A'],['Glycol #18','A'],['Glycol #19','A'],['Corridor #10','A'],['Corridor #11','A'],['Corridor #12','A'],
+  ['OH Cut-up #1','B'],['OH Cut-up #2','B'],['OH Cut-up #3','B'],['OH Cut-up #4','B'],['OH Cut-up #5','B'],['OH Cut-up #6','B'],['OH Cut-up #7','B'],['OH Cut-up #8','B'],
+  ['Long joint #9','B'],['Long joint #10','B'],['Long joint #11','B'],
+  ['SC #1','B'],['SC #2','B'],['SC #3','B'],['SC #4','B'],['SC #5','B'],['SC #6','B'],['SC #7','B'],['SC #8','B'],['SC #20','B'],['SC #21','B'],
+  ['SMP #16','C'],['SMP #17','C'],['Before Ante #9','C'],['Ante CS1','C'],['Ante load CS1','C'],
+  ['Load CS1','C'],['Chill #1','C'],['Chill #2','C'],['Chill #3','C'],['Chill #4','C'],['Chill #5','C'],['Chill #6','C'],['Chill #7','C'],['Chill #8','C'],['Chill #9','C'],
+  ['Ante Frz #1,2','C'],['Ante room #3,4','C'],['Load Chill #4,5','C'],['Packing เก่า','C'],['Ante CS2 #9,10','C'],['Load CS2 #7,8','C']
+].map(([l,s]) => ({ l, s }));
+
+const PROD_FORMS = {
+  comp_52: {
+    key: 'comp_52', title: 'รายการจดเครื่องห้องคอม 5,2', docNo: 'FR-OP-01-031 Rev.00 25/03/69',
+    footerSign: 'ลงชื่อเข้า บ่าย ดึก',
+    sections: [
+      { id: 'airline', type: 'checklist5', rowHeader: 'ตรวจเช็คการทำงานแอร์ในไลน์',
+        cols: ['น้ำหยด','ถาดเดรน','ท่อเดรน','ไม่มีน้ำแข็งเกาะ','พัดลม'],
+        rows: COMP52_AIRLINE_ROWS },
+      { id: 'freezeRoom', type: 'hourly24', rowHeader: 'อุณหภูมิห้องฟรีส',
+        hours: [9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2,3,4,5,6,7,8],
+        rows: [{l:'Freeze 7'},{l:'Freeze 8'},{l:'Main DP Freeze 7-8'}] },
+      { id: 'airTemp', type: 'checkpoint', rowHeader: 'อุณหภูมิแอร์',
+        hours: [9,12,15,18,21,0,3,7],
+        rows: [
+          {l:'Air cut up (≤12)'},{l:'Air SC (≤12)'},{l:'Ante CS1 (≤0)'},
+          {l:'CS1 (≤ -20)'},{l:'CS1 (วัดหน้างาน)'},
+          {l:'Chill1 (0-(-2))'},{l:'Chill2 (0-(-2))'},{l:'Chill3 (0-(-2))'},{l:'Chill4 (0-(-2))'}
+        ] },
+      { id: 'highReceiver', type: 'highReceiver', rowHeader: 'High reciever',
+        rows: ['Receiver 1','Receiver 2','Receiver 3','Receiver 7'],
+        crustFreezerRows: ['Crust Freezer 1'] }
+    ]
+  },
+  comp_46: {
+    key: 'comp_46', title: 'รายการจดเครื่องห้องคอม 4,6', docNo: 'FR-OP-01-031 Rev.00 2/07/69',
+    footerSign: 'ลงชื่อ เข้า บ่าย ดึก',
+    sections: [
+      { id: 'scaleIce', type: 'checklistStd', rowHeader: 'Scale Ice',
+        rows: [
+          {l:'ใบมีด', std:'กรีดน้ำแข็งออกทั้งตัว DRUM'},
+          {l:'DRUM', std:'หมุนทำงาน 360 องศา'},
+          {l:'ท่อน้ำราด DRUM', std:'ราดน้ำเต็ม DRUM'},
+          {l:'เครื่อง COMPRESSOR', std:'สถานะสีเขียว / ทำงานปกติ'},
+          {l:'เครื่อง CONDENSER', std:'สถานะสีเขียว / ทำงานปกติ'},
+          {l:'สถานะจ่ายน้ำยา', std:'จ่ายปกติ/น้ำแข็งเต็ม DRUM'},
+          {l:'ถังพักน้ำ', std:'มีน้ำอยู่ในถัง / ไม่มีจุดรั่ว'}
+        ] },
+      { id: 'lineTemp', type: 'checkpoint', rowHeader: 'อุณหภูมิไลน์ผลิต',
+        hours: [9,12,15,18,21,0,3,6],
+        rows: [
+          {l:'Air glyclol (≤12)'},{l:'แอร์พื้นที่ผลิตอาคารใหม่ (≤12)'},
+          {l:'Chill5 (0-(-2))'},{l:'Chill7 (0-(-2))'},{l:'Chill8 (0-(-2))'},{l:'Chill9 (0-(-2))'},
+          {l:'CS2 (≤ -20)'},{l:'Double Door CS2 IN/OUT'},{l:'CS3 (≤ -20)'},
+          {l:'Refill room CS3 UC11,12 (10-12C)'},{l:'Ante CS3 UC 6 (≤-10)'},{l:'Ante load CS3 UC 5 (≤-10)'},{l:'Load CS3 UC7,8 (5-7)'}
+        ] },
+      { id: 'freezeRoom', type: 'hourly24', rowHeader: 'อุณหภูมิห้องฟรีส',
+        hours: [9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2,3,4,5,6,7,8],
+        rows: [{l:'SP Comp No.15'},{l:'ST Comp No.15'},{l:'Freeze 1'},{l:'Freeze 2'},{l:'Freeze 3'},{l:'Freeze 4'},{l:'Freeze 5'},{l:'Freeze 6'},{l:'Main DP Freeze 5-6'}] },
+      { id: 'highReceiver', type: 'highReceiver', rowHeader: 'High reciever',
+        rows: ['Receiver5','Receiver6','Receiver9 (Crust FRZ)','Receiver10(COM 6)'],
+        crustFreezerRows: ['Crust Freezer 2'] }
+    ]
+  },
+  comp_3: {
+    key: 'comp_3', title: 'รายการจดเครื่องห้องคอม 3', docNo: 'FR-OP-01-031 Rev.00 25/03/69',
+    footerSign: 'ลงชื่อกะ เข้า บ่าย ดึก',
+    sections: [
+      { id: 'tempCheck', type: 'checkpoint', rowHeader: 'รายการตรวจเช็คอุณหภูมิ',
+        hours: [9,12,15,18,21,0,3,6],
+        rows: [
+          {l:'แอร์ห้องกึ๋น A (STD ≤ 12)'},{l:'แอร์ห้องกึ๋น B (STD ≤ 12)'},
+          {l:'แอร์ห้องลอกกึ๋น (STD ≤ 12)'},{l:'AHU ห้องลอกกึ๋น (STD ≤ 12)'},
+          {l:'ห้อง Cold A (STD (-2) - 0)'},{l:'ห้อง Cold C (STD (-2) - 0)'},
+          {l:'ห้อง CCM (STD ≤ 12)'},{l:'ห้อง Chill DMC (0-(-2))'},{l:'แอร์ลาน Load chill (STD ≤ 7)'}
+        ] },
+      { id: 'prodCapacity', type: 'shiftFields', rowHeader: 'รายการตรวจเช็คกำลังการผลิต',
+        fields: ['กำลังการผลิต (Q/hr)','Temp จอ (STD ≤ 0.5 C)','Temp ปากท่อ (STD ≤ 2.0 C)','ปริมาณจัดเก็บในถัง (STD 80-170)'],
+        rows: [
+          {l:'Comp.26 (25 Q/Hr)'},{l:'Comp.27 (15 Q/Hr)'},
+          {l:'Pre-Cool ใต้ออฟฟิศ (<17°C)', single:true},
+          {l:'Comp.6 (21 Q/Hr)'},{l:'Com.29 (25 Q/Hr)'}
+        ] },
+      { id: 'iceCapacity', type: 'shiftFields', rowHeader: 'รายการตรวจเช็คกำลังการผลิต (น้ำแข็ง)',
+        fields: ['เลขมิเตอร์รอบ 1','เลขมิเตอร์รอบ 2','กำลังการผลิต (Ton/hr)','ปริมาณน้ำเกลือ (Litre)'],
+        rows: [
+          {l:'ICE MAKING 3 (1.67 Ton/Hr)'},{l:'ICE MAKING 4 (1.25 Ton/Hr)'},{l:'ICE MAKING 2 (1.25 Ton/Hr)'},
+          {l:'CHIP ICE 1 (1.67 Ton/Hr)', noLastField:true},{l:'CHIP ICE 2 (1.67 Ton/Hr)', noLastField:true}
+        ] },
+      { id: 'highReceiver', type: 'highReceiver', rowHeader: 'High reciever',
+        rows: ['Receiver 4','Receiver 8'] }
+    ]
+  }
+};
+
+/* ---------- state ---------- */
+let prodFormKey = null;
+let prodShift = 'A';
+let prodSelectedEmployee = null;
+let prodDataByShift = { A:{}, B:{}, C:{}, };   // { A: { sectionId: {...} }, ... }
+let prodNoteByShift = { A:'', B:'', C:'' };
+let prodDoneShifts = { A:false, B:false, C:false };
+let prodSubmittedRows = { A:null, B:null, C:null }; // เก็บแถวที่เคย submit แล้วของวัน+ฟอร์มปัจจุบัน (สำหรับ export)
+let prodModuleLoaded = false;
+let isSubmittingProdReading = false;
+
+function initProductionModule() {
+  if (!prodModuleLoaded) {
+    prodModuleLoaded = true;
+    renderProdFormPicker();
+    initProdSigCanvas();
+  }
+  loadProductionHistory({});
+}
+
+/* ---------- 1) เลือกฟอร์ม ---------- */
+function renderProdFormPicker() {
+  const wrap = document.getElementById('prodFormPicker');
+  wrap.innerHTML = '';
+  Object.values(PROD_FORMS).forEach(f => {
+    const card = document.createElement('div');
+    card.className = 'module-card';
+    card.innerHTML = '<div class="module-card-icon">🌀</div>' +
+      '<div class="module-card-body"><div class="module-card-title">' + escapeHtml(f.title) + '</div>' +
+      '<div class="module-card-desc">' + escapeHtml(f.docNo) + '</div></div>' +
+      '<div class="module-card-arrow">›</div>';
+    card.addEventListener('click', () => selectProdForm(f.key));
+    wrap.appendChild(card);
+  });
+}
+
+function selectProdForm(key) {
+  prodFormKey = key;
+  prodDataByShift = { A:{}, B:{}, C:{} };
+  prodNoteByShift = { A:'', B:'', C:'' };
+  prodDoneShifts = { A:false, B:false, C:false };
+  prodSubmittedRows = { A:null, B:null, C:null };
+  document.getElementById('prodFormPicker').style.display = 'none';
+  document.getElementById('prodFormBody').style.display = 'block';
+  const form = PROD_FORMS[key];
+  document.getElementById('prodFormInfoBar').innerHTML =
+    '<div><b>' + escapeHtml(form.title) + '</b><br><span style="font-size:11px;">' + escapeHtml(form.docNo) + '</span></div>' +
+    '<button type="button" class="emp-btn" id="prodChangeFormBtn">↩ เปลี่ยนฟอร์ม</button>';
+  document.getElementById('prodChangeFormBtn').addEventListener('click', () => {
+    document.getElementById('prodFormPicker').style.display = 'block';
+    document.getElementById('prodFormBody').style.display = 'none';
+    prodFormKey = null;
+  });
+  if (!document.getElementById('prodDateInput').value) {
+    document.getElementById('prodDateInput').value = todayDateStr();
+  }
+  populateProdEmployeeSelect();
+  prodShift = 'A';
+  loadProdDayRows();
+  renderProdShiftTabs();
+  renderProdSections();
+}
+
+function populateProdEmployeeSelect() {
+  const sel = document.getElementById('prodEmpSelect');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">-- เลือกพนักงาน --</option>';
+  employees.filter(isActiveEmployee).filter(e => (e.department||'SFO') === (currentDepartment||'SFO'))
+    .forEach(e => {
+      const opt = document.createElement('option');
+      opt.value = e.id; opt.textContent = empLabel(e);
+      sel.appendChild(opt);
+    });
+  if (cur) sel.value = cur;
+}
+document.getElementById('prodEmpSelect').addEventListener('change', function() {
+  prodSelectedEmployee = employees.find(e => String(e.id) === String(this.value)) || null;
+});
+
+document.getElementById('prodDateInput').addEventListener('change', () => {
+  if (!prodFormKey) return;
+  loadProdDayRows();
+});
+
+/* ---------- 2) แท็บกะ ---------- */
+function renderProdShiftTabs() {
+  document.querySelectorAll('#prodShiftTabs .prod-shift-tab').forEach(tab => {
+    const s = tab.dataset.shift;
+    tab.classList.toggle('active', s === prodShift);
+    let badge = tab.querySelector('.pdone');
+    if (prodDoneShifts[s]) {
+      if (!badge) { badge = document.createElement('span'); badge.className = 'pdone'; badge.style.cssText='display:block;font-size:10px;margin-top:2px;'; badge.textContent='✅ บันทึกแล้ว'; tab.appendChild(badge); }
+    } else if (badge) { badge.remove(); }
+  });
+}
+document.querySelectorAll('#prodShiftTabs .prod-shift-tab').forEach(tab => {
+  tab.addEventListener('click', function() {
+    prodShift = this.dataset.shift;
+    renderProdShiftTabs();
+    renderProdSections();
+    clearProdSigCanvas();
+    document.getElementById('prodNoteField').value = prodNoteByShift[prodShift] || '';
+  });
+});
+document.getElementById('prodNoteField').addEventListener('input', function() {
+  if (prodFormKey) prodNoteByShift[prodShift] = this.value;
+});
+
+/* ---------- 3) render ตารางกรอกข้อมูล (เฉพาะกะที่เลือก) ---------- */
+function prodCell(sectionId, rowKey, colKey) {
+  const sd = prodDataByShift[prodShift][sectionId];
+  if (!sd || !sd[rowKey]) return '';
+  const v = sd[rowKey][colKey];
+  return v === undefined || v === null ? '' : v;
+}
+function prodSetCell(sectionId, rowKey, colKey, val) {
+  const shiftData = prodDataByShift[prodShift];
+  if (!shiftData[sectionId]) shiftData[sectionId] = {};
+  if (!shiftData[sectionId][rowKey]) shiftData[sectionId][rowKey] = {};
+  if (val === '') delete shiftData[sectionId][rowKey][colKey];
+  else shiftData[sectionId][rowKey][colKey] = val;
+}
+
+function renderProdSections() {
+  const wrap = document.getElementById('prodSectionsWrap');
+  wrap.innerHTML = '';
+  if (!prodFormKey) return;
+  const form = PROD_FORMS[prodFormKey];
+  form.sections.forEach(sec => {
+    const secEl = document.createElement('div');
+    secEl.innerHTML = renderProdSectionEdit(sec, prodShift);
+    wrap.appendChild(secEl);
+  });
+  bindProdInputEvents(wrap);
+  updateProdFillWarn();
+}
+
+function ixToggleHtml(sectionId, rowKey, colKey, val) {
+  return '<div class="prod-ix-toggle" data-sec="'+sectionId+'" data-row="'+escAttr(rowKey)+'" data-col="'+escAttr(colKey)+'">' +
+    '<button type="button" class="prod-ix-btn'+(val==='I'?' sel':'')+'" data-val="I">I</button>' +
+    '<button type="button" class="prod-ix-btn'+(val==='X'?' sel':'')+'" data-val="X">X</button>' +
+    '</div>';
+}
+function escAttr(s) { return String(s).replace(/"/g,'&quot;'); }
+
+function renderProdSectionEdit(sec, shift) {
+  let html = '<div class="prod-section-title">' + escapeHtml(sec.rowHeader) +
+    ' <span class="pnote">— กะ' + PROD_SHIFT_LABEL[shift] + '</span></div>';
+  html += '<div class="prod-grid-wrap"><table class="prod-grid"><thead>';
+
+  if (sec.type === 'checklist5') {
+    const rows = sec.rows.filter(r => r.s === shift);
+    html += '<tr><th style="min-width:150px;">' + escapeHtml(sec.rowHeader) + '</th>' +
+      sec.cols.map(c => '<th>' + escapeHtml(c) + '</th>').join('') + '</tr></thead><tbody>';
+    if (!rows.length) html += '<tr><td colspan="'+(sec.cols.length+1)+'" style="color:var(--muted);">ไม่มีรายการของกะนี้ในตารางนี้</td></tr>';
+    rows.forEach((r, idx) => {
+      const rowKey = r.l;
+      html += '<tr><td class="prod-row-label">' + escapeHtml(r.l) + ' (กะ '+shift+')</td>' +
+        sec.cols.map(c => '<td>' + ixToggleHtml(sec.id, rowKey, c, prodCell(sec.id, rowKey, c)) + '</td>').join('') + '</tr>';
+    });
+    html += '</tbody>';
+
+  } else if (sec.type === 'checklistStd') {
+    html += '<tr><th style="min-width:150px;">รายการ</th><th>มาตรฐาน</th><th>ปกติ/ผิดปกติ</th><th>หมายเหตุ</th></tr></thead><tbody>';
+    sec.rows.forEach(r => {
+      const rowKey = r.l;
+      const ixVal = prodCell(sec.id, rowKey, 'ix');
+      const noteVal = prodCell(sec.id, rowKey, 'note');
+      html += '<tr><td class="prod-row-label">' + escapeHtml(r.l) + '</td>' +
+        '<td style="font-size:10.5px; color:var(--muted); white-space:normal; min-width:150px;">' + escapeHtml(r.std) + '</td>' +
+        '<td>' + ixToggleHtml(sec.id, rowKey, 'ix', ixVal) + '</td>' +
+        '<td><input type="text" class="prod-note-input" data-sec="'+sec.id+'" data-row="'+escAttr(rowKey)+'" data-col="note" value="'+escapeHtml(noteVal)+'" placeholder="หมายเหตุ"></td></tr>';
+    });
+    html += '</tbody>';
+
+  } else if (sec.type === 'hourly24' || sec.type === 'checkpoint') {
+    const hours = sec.hours.filter(h => prodShiftOfHour(h) === shift);
+    html += '<tr><th style="min-width:150px;">' + escapeHtml(sec.rowHeader) + '</th>' +
+      hours.map(h => '<th>' + h + ':00</th>').join('') + '</tr></thead><tbody>';
+    sec.rows.forEach(r => {
+      const rowKey = r.l;
+      html += '<tr><td class="prod-row-label">' + escapeHtml(r.l) + '</td>' +
+        hours.map(h => '<td><input type="text" inputmode="decimal" data-sec="'+sec.id+'" data-row="'+escAttr(rowKey)+'" data-col="'+h+'" value="'+escapeHtml(prodCell(sec.id, rowKey, h))+'"></td>').join('') +
+        '</tr>';
+    });
+    html += '</tbody>';
+
+  } else if (sec.type === 'shiftFields') {
+    html += '<tr><th style="min-width:150px;">' + escapeHtml(sec.rowHeader) + '</th>' +
+      sec.fields.map(f => '<th>' + escapeHtml(f) + '</th>').join('') + '</tr></thead><tbody>';
+    sec.rows.forEach(r => {
+      const rowKey = r.l;
+      const nFields = r.single ? 1 : (r.noLastField ? sec.fields.length - 1 : sec.fields.length);
+      let cells = '';
+      for (let i = 0; i < sec.fields.length; i++) {
+        if (i < nFields) {
+          cells += '<td><input type="text" inputmode="decimal" data-sec="'+sec.id+'" data-row="'+escAttr(rowKey)+'" data-col="f'+i+'" value="'+escapeHtml(prodCell(sec.id, rowKey, 'f'+i))+'"></td>';
+        } else {
+          cells += '<td style="color:var(--muted);">-</td>';
+        }
+      }
+      if (r.single) cells += '<td colspan="'+(sec.fields.length-1)+'" style="color:var(--muted); font-size:10.5px;">(ค่าเดียว — อุณหภูมิ)</td>';
+      html += '<tr><td class="prod-row-label">' + escapeHtml(r.l) + '</td>' + cells + '</tr>';
+    });
+    html += '</tbody>';
+
+  } else if (sec.type === 'highReceiver') {
+    html += '<tr><th style="min-width:130px;">High reciever</th><th>Discharge P. (≤13.5)</th><th>ระดับ (≥15cm)</th>' +
+      (sec.crustFreezerRows ? '<th>Crust Freezer — เวลาเดินเครื่อง</th><th>Crust Freezer — Temp</th>' : '') +
+      '</tr></thead><tbody>';
+    sec.rows.forEach((label, idx) => {
+      const rowKey = label;
+      let cf = '';
+      if (sec.crustFreezerRows) {
+        const cfLabel = sec.crustFreezerRows[idx] || '';
+        if (cfLabel) {
+          cf = '<td><input type="text" data-sec="'+sec.id+'" data-row="cf_'+escAttr(cfLabel)+'" data-col="time" value="'+escapeHtml(prodCell(sec.id,'cf_'+cfLabel,'time'))+'" placeholder="'+escapeHtml(cfLabel)+'"></td>' +
+               '<td><input type="text" inputmode="decimal" data-sec="'+sec.id+'" data-row="cf_'+escAttr(cfLabel)+'" data-col="temp" value="'+escapeHtml(prodCell(sec.id,'cf_'+cfLabel,'temp'))+'"></td>';
+        } else {
+          cf = '<td></td><td></td>';
+        }
+      }
+      html += '<tr><td class="prod-row-label">' + escapeHtml(label) + '</td>' +
+        '<td><input type="text" inputmode="decimal" data-sec="'+sec.id+'" data-row="'+escAttr(rowKey)+'" data-col="dp" value="'+escapeHtml(prodCell(sec.id, rowKey, 'dp'))+'"></td>' +
+        '<td><input type="text" inputmode="decimal" data-sec="'+sec.id+'" data-row="'+escAttr(rowKey)+'" data-col="lvl" value="'+escapeHtml(prodCell(sec.id, rowKey, 'lvl'))+'"></td>' +
+        cf + '</tr>';
+    });
+    html += '</tbody>';
+  }
+
+  html += '</table></div>';
+  return html;
+}
+
+function bindProdInputEvents(root) {
+  root.querySelectorAll('.prod-grid input[type="text"]').forEach(inp => {
+    inp.addEventListener('input', function() {
+      prodSetCell(this.dataset.sec, this.dataset.row, this.dataset.col, this.value.trim());
+      this.classList.toggle('filled', this.value.trim() !== '');
+      updateProdFillWarn();
+    });
+    if (inp.value.trim() !== '') inp.classList.add('filled');
+  });
+  root.querySelectorAll('.prod-ix-toggle').forEach(tg => {
+    tg.querySelectorAll('.prod-ix-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const already = this.classList.contains('sel');
+        tg.querySelectorAll('.prod-ix-btn').forEach(b => b.classList.remove('sel'));
+        const val = already ? '' : this.dataset.val;
+        if (!already) this.classList.add('sel');
+        prodSetCell(tg.dataset.sec, tg.dataset.row, tg.dataset.col, val);
+        updateProdFillWarn();
+      });
+    });
+  });
+}
+
+function updateProdFillWarn() {
+  const warn = document.getElementById('prodFillWarn');
+  const total = document.querySelectorAll('#prodSectionsWrap .prod-grid input[type="text"]:not(.prod-note-input), #prodSectionsWrap .prod-ix-toggle').length;
+  const filled = document.querySelectorAll('#prodSectionsWrap .prod-grid input[type="text"]:not(.prod-note-input).filled, #prodSectionsWrap .prod-ix-toggle .prod-ix-btn.sel').length;
+  const emptyCount = total - filled;
+  if (emptyCount > 0) {
+    warn.style.display = 'block';
+    warn.textContent = '⚠ ยังกรอกไม่ครบ ' + emptyCount + ' ช่อง (กรอกครบทุกช่องก่อนเซ็นชื่อ ตามข้อกำหนดของฟอร์ม)';
+  } else {
+    warn.style.display = 'none';
+  }
+}
+
+/* ---------- 4) โหลดข้อมูลที่เคยบันทึกของวัน+ฟอร์มนี้ (เผื่อเปิดหน้าเว็บใหม่ระหว่างวัน) ---------- */
+function loadProdDayRows() {
+  const dateStr = document.getElementById('prodDateInput').value;
+  if (!dateStr || !prodFormKey) return Promise.resolve();
+  return withRetry(() => getSbClient().from('production_reports').select('*')
+    .eq('report_type', prodFormKey).eq('report_date', dateStr)
+  ).then(({ data, error }) => {
+    if (error) throw new Error(error.message);
+    prodDataByShift = { A:{}, B:{}, C:{} };
+    prodNoteByShift = { A:'', B:'', C:'' };
+    prodDoneShifts = { A:false, B:false, C:false };
+    prodSubmittedRows = { A:null, B:null, C:null };
+    (data||[]).forEach(row => {
+      prodDataByShift[row.shift] = row.data || {};
+      prodNoteByShift[row.shift] = row.note || '';
+      prodDoneShifts[row.shift] = true;
+      prodSubmittedRows[row.shift] = row;
+    });
+    renderProdShiftTabs();
+    renderProdSections();
+    document.getElementById('prodNoteField').value = prodNoteByShift[prodShift] || '';
+  }).catch(err => { alert('โหลดข้อมูลเดิมไม่สำเร็จ: ' + (err.message||err)); });
+}
+
+/* ---------- 5) Signature pad ---------- */
+let prodSigCtx = null, prodSigDrawing = false, prodSigHasDrawn = false;
+function initProdSigCanvas() {
+  const canvas = document.getElementById('prodSigCanvas');
+  function resize() {
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width * dpr;
+    canvas.height = 140 * dpr;
+    prodSigCtx = canvas.getContext('2d');
+    prodSigCtx.scale(dpr, dpr);
+    prodSigCtx.lineWidth = 2.4;
+    prodSigCtx.lineCap = 'round';
+    prodSigCtx.strokeStyle = '#33302E';
+  }
+  resize();
+  window.addEventListener('resize', () => { if (!prodSigHasDrawn) resize(); });
+
+  function pos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const t = (e.touches && e.touches[0]) || e;
+    return { x: t.clientX - rect.left, y: t.clientY - rect.top };
+  }
+  function start(e) { prodSigDrawing = true; prodSigHasDrawn = true; const p = pos(e); prodSigCtx.beginPath(); prodSigCtx.moveTo(p.x, p.y); e.preventDefault(); }
+  function move(e) { if (!prodSigDrawing) return; const p = pos(e); prodSigCtx.lineTo(p.x, p.y); prodSigCtx.stroke(); e.preventDefault(); }
+  function end() { prodSigDrawing = false; }
+
+  canvas.addEventListener('pointerdown', start);
+  canvas.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', end);
+  canvas.style.touchAction = 'none';
+}
+function clearProdSigCanvas() {
+  const canvas = document.getElementById('prodSigCanvas');
+  if (!prodSigCtx) return;
+  prodSigCtx.clearRect(0, 0, canvas.width, canvas.height);
+  prodSigHasDrawn = false;
+}
+document.getElementById('prodSigClearBtn').addEventListener('click', clearProdSigCanvas);
+
+/* ---------- 6) บันทึก / เซ็นชื่อ ---------- */
+document.getElementById('prodSubmitBtn').addEventListener('click', function() {
+  if (isSubmittingProdReading) return;
+  if (!prodFormKey) return;
+  if (!prodSelectedEmployee) { alert('กรุณาเลือกชื่อพนักงาน'); return; }
+  const dateStr = document.getElementById('prodDateInput').value;
+  if (!dateStr) { alert('กรุณาเลือกวันที่'); return; }
+  if (!prodSigHasDrawn) { alert('กรุณาเซ็นชื่อในช่องลายเซ็นก่อนบันทึก'); return; }
+
+  const totalInputs = document.querySelectorAll('#prodSectionsWrap .prod-grid input[type="text"]:not(.prod-note-input), #prodSectionsWrap .prod-ix-toggle').length;
+  const filledInputs = document.querySelectorAll('#prodSectionsWrap .prod-grid input[type="text"]:not(.prod-note-input).filled, #prodSectionsWrap .prod-ix-toggle .prod-ix-btn.sel').length;
+  if (totalInputs - filledInputs > 0) {
+    if (!confirm('ยังกรอกไม่ครบทุกช่อง (เหลือ ' + (totalInputs-filledInputs) + ' ช่อง) ต้องการบันทึกต่อเลยหรือไม่?')) return;
+  }
+
+  localStorage.setItem('prod_emp_id', prodSelectedEmployee.id);
+  const canvas = document.getElementById('prodSigCanvas');
+  const signatureDataUrl = canvas.toDataURL('image/png');
+
+  const row = {
+    report_type: prodFormKey,
+    report_date: dateStr,
+    shift: prodShift,
+    department: currentDepartment || 'SFO',
+    employee_id: prodSelectedEmployee.id,
+    employee_code: prodSelectedEmployee.emp_code,
+    employee_name: prodSelectedEmployee.emp_name,
+    data: prodDataByShift[prodShift],
+    note: prodNoteByShift[prodShift] || null,
+    signature_data: signatureDataUrl,
+    client_request_id: 'preq_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10)
+  };
+
+  const btn = this;
+  isSubmittingProdReading = true;
+  btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
+
+  withRetry(() => getSbClient().from('production_reports')
+    .upsert([row], { onConflict: 'report_type,report_date,shift' }).select().single()
+  ).then(({ data, error }) => {
+    if (error) throw new Error(error.message);
+    isSubmittingProdReading = false;
+    btn.disabled = false; btn.textContent = '✅ บันทึก + เซ็นชื่อกะนี้';
+    prodDoneShifts[prodShift] = true;
+    prodSubmittedRows[prodShift] = data;
+    renderProdShiftTabs();
+    const box = document.getElementById('prodLogSuccess');
+    box.innerHTML = '<div class="success-banner">✅ บันทึกและเซ็นชื่อกะ' + PROD_SHIFT_LABEL[prodShift] + ' สำเร็จ</div>';
+    setTimeout(() => { box.innerHTML = ''; }, 6000);
+    loadProductionHistory({});
+  }).catch(err => {
+    isSubmittingProdReading = false;
+    btn.disabled = false; btn.textContent = '✅ บันทึก + เซ็นชื่อกะนี้';
+    alert('เชื่อมต่อไม่ได้: ' + (err.message || err) + '\n\nยังไม่ได้บันทึกข้อมูล กรุณาลองกดบันทึกใหม่อีกครั้งได้เลย ไม่ซ้ำแน่นอน');
+  });
+});
+
+/* ---------- 7) ประวัติ ---------- */
+let prodHistoryRowsRaw = [];
+function loadProductionHistory(opts) {
+  const range = document.getElementById('prodHistRangeFilter') ? document.getElementById('prodHistRangeFilter').value : '30';
+  let q = getSbClient().from('production_reports').select('*').order('report_date', { ascending: false });
+  if (range !== 'all') {
+    const d = new Date(); d.setDate(d.getDate() - Number(range));
+    q = q.gte('report_date', d.toISOString().slice(0,10));
+  }
+  return withRetry(() => q).then(({ data, error }) => {
+    if (error) throw new Error(error.message);
+    prodHistoryRowsRaw = data || [];
+    renderProductionHistory();
+  }).catch(err => {
+    document.getElementById('prodHistoryList').innerHTML = '<div class="empty-state">โหลดไม่สำเร็จ: ' + escapeHtml(err.message||String(err)) + '</div>';
+  });
+}
+document.getElementById('prodHistFormFilter').addEventListener('change', renderProductionHistory);
+document.getElementById('prodHistRangeFilter').addEventListener('change', () => loadProductionHistory({}));
+
+function renderProductionHistory() {
+  const formFilter = document.getElementById('prodHistFormFilter').value;
+  const list = document.getElementById('prodHistoryList');
+  let rows = prodHistoryRowsRaw.slice();
+  if (formFilter) rows = rows.filter(r => r.report_type === formFilter);
+
+  const groups = {}; // key = report_type + '|' + report_date
+  rows.forEach(r => {
+    const key = r.report_type + '|' + r.report_date;
+    if (!groups[key]) groups[key] = { report_type: r.report_type, report_date: r.report_date, shifts: {} };
+    groups[key].shifts[r.shift] = r;
+  });
+  const groupList = Object.values(groups).sort((a,b) => a.report_date < b.report_date ? 1 : -1);
+
+  if (!groupList.length) { list.innerHTML = '<div class="empty-state">ยังไม่มีข้อมูลรายงานผลผลิตในช่วงนี้</div>'; return; }
+
+  list.innerHTML = groupList.map(g => {
+    const form = PROD_FORMS[g.report_type];
+    const shiftBadges = ['A','B','C'].map(s => {
+      const done = !!g.shifts[s];
+      return '<div class="prod-hist-shift-badge' + (done?' done':'') + '">' + PROD_SHIFT_LABEL[s] + (done ? ' ✅' : ' —') + '</div>';
+    }).join('');
+    return '<div class="prod-hist-card">' +
+      '<div class="prod-hist-title">' + escapeHtml(form ? form.title : g.report_type) + ' — ' + fmtProdDateShort(g.report_date) + '</div>' +
+      '<div class="prod-hist-shifts">' + shiftBadges + '</div>' +
+      '<button class="export-btn-full" data-pdf-type="' + g.report_type + '" data-pdf-date="' + g.report_date + '">📄 Export PDF</button>' +
+      '</div>';
+  }).join('');
+
+  list.querySelectorAll('[data-pdf-type]').forEach(btn => {
+    btn.addEventListener('click', function() {
+      exportProductionDayPDF(this.dataset.pdfType, this.dataset.pdfDate);
+    });
+  });
+}
+
+function fmtProdDateShort(dateStr) {
+  if (!dateStr) return '';
+  const [y,m,d] = dateStr.split('-');
+  return d + '/' + m + '/' + y;
+}
+
+/* ================================================================
+ * 8) Export PDF — render "หน้ากระดาษ" เต็มรูปแบบ (รวม 3 กะ) ด้วย HTML จริง
+ *    แล้ว rasterize ด้วย html2canvas ก่อนฝังลง jsPDF — เลือกวิธีนี้แทน
+ *    jsPDF text ตรงๆ เพราะฟอนต์ default ของ jsPDF ไม่รองรับภาษาไทย
+ *    การ render ผ่าน browser ทำให้ได้ฟอนต์ไทยที่ถูกต้อง 100%
+ * ================================================================ */
+function mergedCellFromRows(shiftRows, shift, sectionId, rowKey, colKey) {
+  const row = shiftRows[shift];
+  if (!row || !row.data || !row.data[sectionId] || !row.data[sectionId][rowKey]) return '';
+  const v = row.data[sectionId][rowKey][colKey];
+  return (v === undefined || v === null) ? '' : String(v);
+}
+
+function pfChecklist5(sec, shiftRows) {
+  const blocks = [];
+  for (let i = 0; i < 4; i++) blocks.push(sec.rows.slice(i*16, i*16+16));
+  let html = '<div class="pf-bar">' + escapeHtml(sec.rowHeader) + '</div><div style="display:flex; gap:4px;">';
+  blocks.forEach(block => {
+    html += '<table class="pf-table" style="flex:1;"><thead>' +
+      '<tr><th colspan="' + (sec.cols.length+1) + '" style="background:#EAE6E3; font-weight:700;">รายการตรวจเช็ค (I = ปกติ , X = ผิดปกติ)</th></tr>' +
+      '<tr><th class="pf-label">' + escapeHtml(sec.rowHeader) + '</th>' + sec.cols.map(c => '<th class="pf-vert">' + escapeHtml(c) + '</th>').join('') + '</tr>' +
+      '</thead><tbody>';
+    block.forEach(r => {
+      html += '<tr><td class="pf-label">' + escapeHtml(r.l) + ' (กะ ' + r.s + ')</td>' +
+        sec.cols.map(c => '<td>' + escapeHtml(mergedCellFromRows(shiftRows, r.s, sec.id, r.l, c)) + '</td>').join('') + '</tr>';
+    });
+    html += '</tbody></table>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function pfChecklistStd(sec, shiftRows) {
+  let html = '<div class="pf-bar">' + escapeHtml(sec.rowHeader) + '</div><table class="pf-table"><thead>' +
+    '<tr><th rowspan="2" class="pf-label">Scale Ice</th><th rowspan="2">ค่ามาตรฐาน</th>' +
+    ['A','B','C'].map(s => '<th colspan="2">กะ ' + s + '</th>').join('') + '</tr>' +
+    '<tr>' + ['A','B','C'].map(() => '<th>ปกติ/ผิดปกติ</th><th>หมายเหตุ</th>').join('') + '</tr></thead><tbody>';
+  sec.rows.forEach(r => {
+    html += '<tr><td class="pf-label">' + escapeHtml(r.l) + '</td><td style="font-size:9px;">' + escapeHtml(r.std) + '</td>';
+    ['A','B','C'].forEach(s => {
+      html += '<td>' + escapeHtml(mergedCellFromRows(shiftRows, s, sec.id, r.l, 'ix')) + '</td><td style="font-size:9px;">' + escapeHtml(mergedCellFromRows(shiftRows, s, sec.id, r.l, 'note')) + '</td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+function pfTimeTable(sec, shiftRows) {
+  let html = '<div class="pf-bar">' + escapeHtml(sec.rowHeader) + '</div><table class="pf-table"><thead><tr><th class="pf-label">' + escapeHtml(sec.rowHeader) + '</th>' +
+    sec.hours.map(h => '<th>' + h + ':00</th>').join('') + '</tr></thead><tbody>';
+  sec.rows.forEach(r => {
+    html += '<tr><td class="pf-label">' + escapeHtml(r.l) + '</td>' +
+      sec.hours.map(h => '<td>' + escapeHtml(mergedCellFromRows(shiftRows, prodShiftOfHour(h), sec.id, r.l, h)) + '</td>').join('') +
+      '</tr>';
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+function pfShiftFields(sec, shiftRows) {
+  let html = '<div class="pf-bar">' + escapeHtml(sec.rowHeader) + '</div><table class="pf-table"><thead>' +
+    '<tr><th rowspan="2" class="pf-label">' + escapeHtml(sec.rowHeader) + '</th>' + ['A','B','C'].map(s => '<th colspan="' + sec.fields.length + '">กะ ' + s + '</th>').join('') + '</tr>' +
+    '<tr>' + ['A','B','C'].map(() => sec.fields.map(f => '<th style="font-size:8.5px;">' + escapeHtml(f) + '</th>').join('')).join('') + '</tr>' +
+    '</thead><tbody>';
+  sec.rows.forEach(r => {
+    html += '<tr><td class="pf-label">' + escapeHtml(r.l) + '</td>';
+    const nFields = r.single ? 1 : (r.noLastField ? sec.fields.length - 1 : sec.fields.length);
+    ['A','B','C'].forEach(s => {
+      for (let i = 0; i < sec.fields.length; i++) {
+        if (i < nFields) html += '<td>' + escapeHtml(mergedCellFromRows(shiftRows, s, sec.id, r.l, 'f'+i)) + '</td>';
+        else html += '<td>-</td>';
+      }
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+function pfHighReceiver(sec, shiftRows) {
+  let html = '<div class="pf-bar">' + escapeHtml(sec.rowHeader) + '</div><table class="pf-table"><thead>' +
+    '<tr><th rowspan="2" class="pf-label">High reciever</th>' + ['A','B','C'].map(s => '<th colspan="2">กะ ' + s + '</th>').join('') +
+    (sec.crustFreezerRows ? ('<th rowspan="2">Crust Freezer</th>' + ['A','B','C'].map(s => '<th colspan="2">กะ ' + s + '</th>').join('')) : '') +
+    '</tr><tr>' + ['A','B','C'].map(() => '<th>Discharge P.(≤13.5)</th><th>ระดับ(≥15cm)</th>').join('') +
+    (sec.crustFreezerRows ? ['A','B','C'].map(() => '<th>เวลาเดินเครื่อง</th><th>Temp</th>').join('') : '') +
+    '</tr></thead><tbody>';
+  sec.rows.forEach((label, idx) => {
+    html += '<tr><td class="pf-label">' + escapeHtml(label) + '</td>';
+    ['A','B','C'].forEach(s => {
+      html += '<td>' + escapeHtml(mergedCellFromRows(shiftRows, s, sec.id, label, 'dp')) + '</td><td>' + escapeHtml(mergedCellFromRows(shiftRows, s, sec.id, label, 'lvl')) + '</td>';
+    });
+    if (sec.crustFreezerRows) {
+      const cfLabel = sec.crustFreezerRows[idx] || '';
+      html += '<td class="pf-label">' + escapeHtml(cfLabel) + '</td>';
+      ['A','B','C'].forEach(s => {
+        html += '<td>' + escapeHtml(mergedCellFromRows(shiftRows, s, sec.id, 'cf_'+cfLabel, 'time')) + '</td><td>' + escapeHtml(mergedCellFromRows(shiftRows, s, sec.id, 'cf_'+cfLabel, 'temp')) + '</td>';
+      });
+    }
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+function sectionPrintHTML(sec, shiftRows) {
+  if (sec.type === 'checklist5') return pfChecklist5(sec, shiftRows);
+  if (sec.type === 'checklistStd') return pfChecklistStd(sec, shiftRows);
+  if (sec.type === 'hourly24' || sec.type === 'checkpoint') return pfTimeTable(sec, shiftRows);
+  if (sec.type === 'shiftFields') return pfShiftFields(sec, shiftRows);
+  if (sec.type === 'highReceiver') return pfHighReceiver(sec, shiftRows);
+  return '';
+}
+
+function buildProdPrintHTML(form, dateStr, shiftRows) {
+  let html = '<div class="pf-page">';
+  html += '<div class="pf-headrow"><div>รายงานผลผลิตแผนก OPERATE</div>' +
+    '<div class="c">วันที่ ' + fmtProdDateShort(dateStr).split('/').join(' / ') + '</div>' +
+    '<div>' + escapeHtml(form.docNo) + '</div></div>';
+  html += '<div class="pf-bar" style="font-size:14px; margin-top:6px;">' + escapeHtml(form.title) + '</div>';
+  form.sections.forEach(sec => { html += sectionPrintHTML(sec, shiftRows); });
+
+  html += '<div class="pf-footnote">หมายเหตุ:การจดบันทึกต้องระบุเวลาครบทุกช่อง</div>';
+  html += '<div class="pf-sig"><span>' + escapeHtml(form.footerSign) + '</span>';
+  ['A','B','C'].forEach(s => {
+    const row = shiftRows[s];
+    html += '<span class="slot">';
+    if (row && row.signature_data) html += '<img src="' + row.signature_data + '">';
+    else html += '<div style="width:120px; height:34px; border-bottom:1px solid #333;"></div>';
+    html += '<span class="cap">' + PROD_SHIFT_LABEL[s] + (row ? (' — ' + escapeHtml(row.employee_name || '')) : ' (ยังไม่เซ็น)') + '</span></span>';
+  });
+  html += '</div></div>';
+  return html;
+}
+
+function exportProductionDayPDF(reportType, dateStr) {
+  const form = PROD_FORMS[reportType];
+  if (!form) return;
+  const rows = prodHistoryRowsRaw.filter(r => r.report_type === reportType && r.report_date === dateStr);
+  const shiftRows = { A:null, B:null, C:null };
+  rows.forEach(r => { shiftRows[r.shift] = r; });
+
+  const root = document.getElementById('prodPrintRoot');
+  root.innerHTML = buildProdPrintHTML(form, dateStr, shiftRows);
+
+  html2canvas(root, { scale: 2, backgroundColor: '#ffffff', useCORS: true }).then(canvas => {
+    const imgData = canvas.toDataURL('image/png');
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    let renderW = pageW - 24;
+    let renderH = renderW * canvas.height / canvas.width;
+    if (renderH > pageH - 24) { renderH = pageH - 24; renderW = renderH * canvas.width / canvas.height; }
+    pdf.addImage(imgData, 'PNG', (pageW - renderW) / 2, 12, renderW, renderH);
+    pdf.save(form.key + '_' + dateStr + '.pdf');
+    root.innerHTML = '';
+  }).catch(err => {
+    alert('สร้าง PDF ไม่สำเร็จ: ' + (err.message || err));
+    root.innerHTML = '';
+  });
+}
+
+
 function init() {
   if (!checkConfigured()) return;
   setSyncStatus(true, 'กำลังโหลดข้อมูล...');
@@ -3693,7 +4554,10 @@ init();
 setInterval(() => {
   loadCompressors().then(() => { renderHistory(); renderTechStatusBar(); }).catch(() => { /* เงียบไว้ ไม่รบกวนผู้ใช้ */ });
   if (waterModuleLoaded) renderWaterTechStatusBar();
+  if (prodModuleLoaded) loadProductionHistory({});
 }, 5 * 60 * 1000);
 </script>
+  <div id="prodPrintRoot"></div>
+
 </body>
 </html>
