@@ -377,6 +377,21 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
   .prod-hist-shift-badge { flex:1; text-align:center; padding:6px 4px; border-radius:8px; font-size:11.5px; font-weight:700; background:var(--panel2); color:var(--muted); border:1px solid var(--border); }
   .prod-hist-shift-badge.done { background:#E5F3EA; color:#2F6B45; border-color:rgba(47,107,69,0.3); }
   .prod-fill-warn { font-size:11.5px; color:var(--accent); background:var(--accent-soft); border-radius:8px; padding:8px 10px; margin:10px 0; display:none; }
+
+  /* ---------- แก้ไขโครงสร้างฟอร์มผลผลิต (แอดมิน) — แถวแบบ spreadsheet ---------- */
+  .formedit-row { display:flex; gap:6px; align-items:center; margin-bottom:6px; }
+  .formedit-row .idx { width:20px; font-size:11px; color:var(--muted); text-align:right; flex-shrink:0; }
+  .formedit-row input[type="text"] { flex:1; min-width:0; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:13px; }
+  .formedit-row select { padding:8px 6px; border-radius:8px; border:1px solid var(--border); background:var(--panel2); color:var(--text); font-size:12.5px; flex-shrink:0; }
+  .formedit-row .btns { display:flex; gap:3px; flex-shrink:0; }
+  .formedit-row .btns button { width:28px; height:28px; border-radius:6px; border:1px solid var(--border); background:var(--panel); color:var(--text); cursor:pointer; font-size:12px; }
+  .formedit-row .btns button.del { border-color:var(--red); color:var(--red); }
+  .formedit-add-btn { width:100%; padding:10px; border-radius:10px; border:1.5px dashed var(--accent); background:var(--accent-soft); color:var(--accent); font-weight:700; font-size:13px; cursor:pointer; margin-top:6px; }
+  .formedit-hours-wrap { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+  .formedit-hour-chip { display:inline-flex; align-items:center; gap:4px; background:var(--panel2); border:1px solid var(--border); border-radius:20px; padding:4px 4px 4px 12px; }
+  .formedit-hour-chip input { width:46px; border:none; background:none; font-size:13px; color:var(--text); text-align:center; }
+  .formedit-hour-chip .suffix { font-size:11px; color:var(--muted); }
+  .formedit-hour-chip button { width:20px; height:20px; border-radius:50%; border:none; background:var(--red-soft); color:var(--red); cursor:pointer; font-size:11px; line-height:1; }
   .prod-hist-card-actions { display:flex; gap:8px; }
   .prod-hist-card-actions button { flex:1; padding:9px; border-radius:8px; border:1px solid var(--accent); background:var(--panel); color:var(--accent); font-weight:700; font-size:12.5px; cursor:pointer; }
   .prod-hist-card-actions button.secondary { border-color:var(--border); color:var(--text); }
@@ -935,6 +950,7 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
       <div class="chip active" data-tool="std">🎚️ ตั้งค่ามาตรฐาน</div>
       <div class="chip" data-tool="bulk">🧰 ตั้งค่าหลายเครื่อง</div>
       <div class="chip" data-tool="sheet">🗂️ ตารางค่ามาตรฐาน</div>
+      <div class="chip" data-tool="formedit">📝 แก้ไขฟอร์มผลผลิต</div>
     </div>
 
     <div class="subview active" id="sub-std">
@@ -982,6 +998,31 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
         <table id="sheetTable"></table>
       </div>
       <button class="save-std-btn" id="sheetSaveAllBtn" style="margin-top:14px;">💾 บันทึกทั้งหมด</button>
+    </div>
+
+    <div class="subview" id="sub-formedit">
+      <div style="font-size:11.5px; color:var(--muted); margin-bottom:12px; line-height:1.6;">
+        แก้โครงสร้างฟอร์มบันทึกผลผลิตได้เอง (เพิ่ม/ลบ/ย้ายแถว, เปลี่ยนกะ, เปลี่ยนช่วงเวลาที่ต้องจด) โดยไม่ต้องแก้โค้ด —
+        บันทึกแล้วมีผลทันทีกับทุกคนที่เปิดแอปครั้งถัดไป (ไม่กระทบข้อมูลที่บันทึกไว้แล้วในอดีต)
+      </div>
+      <div class="field">
+        <label>เลือกฟอร์ม</label>
+        <select id="formEditFormSelect">
+          <option value="comp_52">ห้องคอม 5,2</option>
+          <option value="comp_46">ห้องคอม 4,6</option>
+          <option value="comp_3">ห้องคอม 3</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>เลือกหัวข้อที่จะแก้</label>
+        <select id="formEditSectionSelect"></select>
+      </div>
+      <div id="formEditBody"></div>
+      <div style="display:flex; gap:8px; margin-top:14px;">
+        <button class="save-std-btn" id="formEditSaveBtn" style="flex:1;">💾 บันทึกการแก้ไข</button>
+        <button class="emp-btn" id="formEditResetBtn">↩ รีเซ็ตหัวข้อนี้เป็นค่าเริ่มต้น</button>
+      </div>
+      <div id="formEditMsg" style="font-size:12.5px; margin-top:8px; display:none;"></div>
     </div>
   </div>
 </div>
@@ -3371,6 +3412,7 @@ document.querySelectorAll('#view-settings-tools .chip[data-tool]').forEach(chip 
     document.getElementById('sub-' + this.dataset.tool).classList.add('active');
     if (this.dataset.tool === 'bulk') renderBulkEditor();
     if (this.dataset.tool === 'sheet') renderSheetEditor();
+    if (this.dataset.tool === 'formedit') renderProdFormEditor();
   });
 });
 
@@ -5013,6 +5055,217 @@ function collectProdReportNotes(form, shiftRows) {
   return lines;
 }
 
+/* ================================================================
+ * 9) แก้ไขโครงสร้างฟอร์มผลผลิต (แอดมินเท่านั้น) — เพิ่ม/ลบ/ย้ายแถว, เปลี่ยนกะ,
+ *    เปลี่ยนช่วงเวลาที่ต้องจด — บันทึกลง production_form_overrides แล้วมีผล
+ *    ทันทีกับทุกคนที่เปิดแอปครั้งถัดไป โดยไม่ต้องแก้โค้ด/อัปโหลดไฟล์ใหม่
+ * ================================================================ */
+let PROD_FORMS_DEFAULT = null; // สำเนาต้นฉบับ เผื่อ "รีเซ็ตเป็นค่าเริ่มต้น"
+let prodFormOverrides = {};    // { form_key: { sectionId: {rows:[...]} หรือ {hours:[...]} } } ที่โหลดมาจาก DB
+
+function applyProdFormOverrides() {
+  Object.keys(prodFormOverrides).forEach(formKey => {
+    const form = PROD_FORMS[formKey];
+    if (!form) return;
+    const defs = prodFormOverrides[formKey] || {};
+    Object.keys(defs).forEach(sectionId => {
+      const sec = form.sections.find(s => s.id === sectionId);
+      if (!sec) return;
+      const patch = defs[sectionId];
+      if (patch && patch.rows) sec.rows = JSON.parse(JSON.stringify(patch.rows));
+      if (patch && patch.hours) sec.hours = JSON.parse(JSON.stringify(patch.hours));
+    });
+  });
+}
+
+function loadProdFormOverrides() {
+  if (!PROD_FORMS_DEFAULT) PROD_FORMS_DEFAULT = JSON.parse(JSON.stringify(PROD_FORMS));
+  return withRetry(() => getSbClient().from('production_form_overrides').select('*'))
+    .then(({ data, error }) => {
+      if (error) throw new Error(error.message);
+      prodFormOverrides = {};
+      (data || []).forEach(row => { prodFormOverrides[row.form_key] = row.defs || {}; });
+      applyProdFormOverrides();
+    })
+    .catch(err => { console.warn('โหลดการปรับแต่งฟอร์มผลผลิตไม่สำเร็จ (ใช้ค่าเริ่มต้นแทนไปก่อน):', err.message || err); });
+}
+
+function currentFormEditSection() {
+  const formKey = document.getElementById('formEditFormSelect').value;
+  const secId = document.getElementById('formEditSectionSelect').value;
+  const form = PROD_FORMS[formKey];
+  return form ? form.sections.find(s => s.id === secId) : null;
+}
+
+function populateFormEditSectionSelect() {
+  const formKey = document.getElementById('formEditFormSelect').value;
+  const form = PROD_FORMS[formKey];
+  const sel = document.getElementById('formEditSectionSelect');
+  sel.innerHTML = form.sections.map(sec => '<option value="' + sec.id + '">' + escapeHtml(sec.rowHeader) + '</option>').join('');
+  renderProdFormEditorBody();
+}
+document.getElementById('formEditFormSelect').addEventListener('change', populateFormEditSectionSelect);
+document.getElementById('formEditSectionSelect').addEventListener('change', renderProdFormEditorBody);
+
+function renderProdFormEditor() {
+  populateFormEditSectionSelect();
+}
+
+let formEditCurrentRows = null;
+let formEditCurrentHours = null;
+
+function renderProdFormEditorBody() {
+  const sec = currentFormEditSection();
+  const body = document.getElementById('formEditBody');
+  document.getElementById('formEditMsg').style.display = 'none';
+  if (!sec) { body.innerHTML = ''; return; }
+  if (sec.type === 'hourly24' || sec.type === 'checkpoint') {
+    formEditCurrentHours = sec.hours.slice();
+    formEditCurrentRows = null;
+    renderFormEditHours();
+  } else {
+    formEditCurrentRows = JSON.parse(JSON.stringify(sec.rows));
+    formEditCurrentHours = null;
+    renderFormEditRows();
+  }
+}
+
+function renderFormEditHours() {
+  const body = document.getElementById('formEditBody');
+  let html = '<div style="font-size:11.5px; color:var(--muted); margin-bottom:8px;">รายการช่วงเวลาที่ต้องจด (ชั่วโมงที่ 0–23) — เรียงลำดับให้อัตโนมัติตอนบันทึก</div>';
+  html += '<div class="formedit-hours-wrap" id="formEditHoursWrap">';
+  formEditCurrentHours.forEach((h, i) => {
+    html += '<div class="formedit-hour-chip"><input type="number" min="0" max="23" data-hidx="' + i + '" value="' + h + '"><span class="suffix">:00</span><button type="button" data-hdel="' + i + '">✕</button></div>';
+  });
+  html += '</div><button type="button" class="formedit-add-btn" id="formEditAddHourBtn">➕ เพิ่มเวลา</button>';
+  body.innerHTML = html;
+
+  body.querySelectorAll('[data-hidx]').forEach(inp => {
+    inp.addEventListener('input', function() { formEditCurrentHours[Number(this.dataset.hidx)] = Number(this.value); });
+  });
+  body.querySelectorAll('[data-hdel]').forEach(btn => {
+    btn.addEventListener('click', function() { formEditCurrentHours.splice(Number(this.dataset.hdel), 1); renderFormEditHours(); });
+  });
+  document.getElementById('formEditAddHourBtn').addEventListener('click', () => { formEditCurrentHours.push(0); renderFormEditHours(); });
+}
+
+function renderFormEditRows() {
+  const sec = currentFormEditSection();
+  const body = document.getElementById('formEditBody');
+  const hasShift = sec.type === 'checklist5';
+  const hasStd = sec.type === 'checklistStd';
+  const isPlainString = sec.type === 'highReceiver';
+
+  let hint = hasShift
+    ? 'แต่ละแถวมีชื่อ + กะ (A/B/C) — ย้ายกะได้จากช่อง dropdown เลย ลำดับแถวมีผลต่อตำแหน่งที่พิมพ์ในกระดาษ (แนะนำให้จำนวนแถวเป็นทวีคูณของ 16 เพื่อความสวยงามตอนพิมพ์)'
+    : hasStd ? 'แต่ละแถวมีชื่อ + ค่ามาตรฐาน' : 'แต่ละแถวมีชื่อเดียว';
+  let html = '<div style="font-size:11.5px; color:var(--muted); margin-bottom:8px;">' + hint + '</div><div id="formEditRowsWrap">';
+
+  formEditCurrentRows.forEach((r, i) => {
+    const label = isPlainString ? r : r.l;
+    html += '<div class="formedit-row" data-ridx="' + i + '">';
+    html += '<span class="idx">' + (i+1) + '</span>';
+    html += '<input type="text" data-rfield="l" value="' + escapeHtml(label) + '" placeholder="ชื่อรายการ">';
+    if (hasShift) html += '<select data-rfield="s">' + ['A','B','C'].map(s => '<option value="'+s+'"' + (r.s===s?' selected':'') + '>กะ '+s+'</option>').join('') + '</select>';
+    if (hasStd) html += '<input type="text" data-rfield="std" value="' + escapeHtml(r.std||'') + '" placeholder="ค่ามาตรฐาน" style="flex:1.2;">';
+    html += '<div class="btns">' +
+      '<button type="button" data-rmove="-1" title="ย้ายขึ้น">↑</button>' +
+      '<button type="button" data-rmove="1" title="ย้ายลง">↓</button>' +
+      '<button type="button" class="del" data-rdel title="ลบแถว">🗑</button>' +
+      '</div></div>';
+  });
+  html += '</div><button type="button" class="formedit-add-btn" id="formEditAddRowBtn">➕ เพิ่มแถว</button>';
+  body.innerHTML = html;
+
+  body.querySelectorAll('[data-rfield]').forEach(inp => {
+    inp.addEventListener('input', function() {
+      const i = Number(this.closest('.formedit-row').dataset.ridx);
+      if (isPlainString) { formEditCurrentRows[i] = this.value; return; }
+      formEditCurrentRows[i][this.dataset.rfield] = this.value;
+    });
+  });
+  body.querySelectorAll('[data-rmove]').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const i = Number(this.closest('.formedit-row').dataset.ridx);
+      const j = i + Number(this.dataset.rmove);
+      if (j < 0 || j >= formEditCurrentRows.length) return;
+      const tmp = formEditCurrentRows[i]; formEditCurrentRows[i] = formEditCurrentRows[j]; formEditCurrentRows[j] = tmp;
+      renderFormEditRows();
+    });
+  });
+  body.querySelectorAll('[data-rdel]').forEach(btn => {
+    btn.addEventListener('click', function() {
+      if (!confirm('ยืนยันลบแถวนี้?')) return;
+      formEditCurrentRows.splice(Number(this.closest('.formedit-row').dataset.ridx), 1);
+      renderFormEditRows();
+    });
+  });
+  document.getElementById('formEditAddRowBtn').addEventListener('click', () => {
+    formEditCurrentRows.push(isPlainString ? 'รายการใหม่' : (hasShift ? { l:'รายการใหม่', s:'A' } : (hasStd ? { l:'รายการใหม่', std:'' } : { l:'รายการใหม่' })));
+    renderFormEditRows();
+  });
+}
+
+document.getElementById('formEditSaveBtn').addEventListener('click', () => {
+  const formKey = document.getElementById('formEditFormSelect').value;
+  const sec = currentFormEditSection();
+  const msg = document.getElementById('formEditMsg');
+  const showMsg = (t, isErr) => { msg.textContent = t; msg.style.color = isErr ? 'var(--red)' : 'var(--accent)'; msg.style.display = 'block'; };
+  if (!sec) return;
+
+  let patchValue;
+  if (sec.type === 'hourly24' || sec.type === 'checkpoint') {
+    const hours = Array.from(new Set(formEditCurrentHours.filter(h => !isNaN(h)).map(h => ((h % 24) + 24) % 24)));
+    if (!hours.length) { showMsg('ต้องมีอย่างน้อย 1 ช่วงเวลา', true); return; }
+    patchValue = { hours: hours };
+  } else {
+    const isPlainString = sec.type === 'highReceiver';
+    const cleaned = formEditCurrentRows.map(r => isPlainString ? String(r).trim() : Object.assign({}, r, { l: String(r.l).trim() }));
+    if (!cleaned.length) { showMsg('ต้องมีอย่างน้อย 1 แถว', true); return; }
+    if (cleaned.some(r => !(isPlainString ? r : r.l))) { showMsg('ชื่อรายการห้ามเว้นว่าง', true); return; }
+    patchValue = { rows: cleaned };
+  }
+
+  if (!prodFormOverrides[formKey]) prodFormOverrides[formKey] = {};
+  prodFormOverrides[formKey][sec.id] = patchValue;
+  const u = getCurrentUser();
+
+  withRetry(() => getSbClient().from('production_form_overrides')
+    .upsert([{ form_key: formKey, defs: prodFormOverrides[formKey], updated_by: u ? u.emp_name : null, updated_at: new Date().toISOString() }])
+    .select().single()
+  ).then(({ error }) => {
+    if (error) { showMsg('บันทึกไม่สำเร็จ: ' + error.message, true); return; }
+    applyProdFormOverrides();
+    showMsg('✅ บันทึกสำเร็จ มีผลทันทีกับทุกคนที่เปิดแอปครั้งถัดไป', false);
+  }).catch(err => showMsg('เชื่อมต่อไม่ได้: ' + (err.message || err), true));
+});
+
+document.getElementById('formEditResetBtn').addEventListener('click', () => {
+  const formKey = document.getElementById('formEditFormSelect').value;
+  const sec = currentFormEditSection();
+  const msg = document.getElementById('formEditMsg');
+  const showMsg = (t, isErr) => { msg.textContent = t; msg.style.color = isErr ? 'var(--red)' : 'var(--accent)'; msg.style.display = 'block'; };
+  if (!sec) return;
+  if (!confirm('รีเซ็ตหัวข้อ "' + sec.rowHeader + '" กลับเป็นค่าเริ่มต้นจากระบบ?\nการแก้ไขที่เคยบันทึกไว้ของหัวข้อนี้จะหายไป (หัวข้ออื่นในฟอร์มเดียวกันไม่กระทบ)')) return;
+
+  if (prodFormOverrides[formKey]) delete prodFormOverrides[formKey][sec.id];
+  const defaultForm = PROD_FORMS_DEFAULT[formKey];
+  const defaultSec = defaultForm ? defaultForm.sections.find(s => s.id === sec.id) : null;
+  if (defaultSec) {
+    if (defaultSec.rows) sec.rows = JSON.parse(JSON.stringify(defaultSec.rows));
+    if (defaultSec.hours) sec.hours = JSON.parse(JSON.stringify(defaultSec.hours));
+  }
+
+  withRetry(() => getSbClient().from('production_form_overrides')
+    .upsert([{ form_key: formKey, defs: prodFormOverrides[formKey] || {}, updated_at: new Date().toISOString() }])
+    .select().single()
+  ).then(({ error }) => {
+    if (error) { showMsg('รีเซ็ตไม่สำเร็จ: ' + error.message, true); return; }
+    renderProdFormEditorBody();
+    showMsg('✅ รีเซ็ตเป็นค่าเริ่มต้นแล้ว', false);
+  }).catch(err => showMsg('เชื่อมต่อไม่ได้: ' + (err.message || err), true));
+});
+
 function pdfBar(doc, x, y, w, text, fontSize) {
   doc.setFillColor(58, 53, 50);
   doc.rect(x, y, w, 13, 'F');
@@ -5294,7 +5547,7 @@ function init() {
     document.getElementById('retryConnectBtn').style.display = 'inline';
   }, 15000);
 
-  Promise.all([loadCompressors(), loadEmployees(), loadReadings({})]).then(() => {
+  Promise.all([loadCompressors(), loadEmployees(), loadReadings({}), loadProdFormOverrides()]).then(() => {
     if (settled) return;
     settled = true;
     clearTimeout(timeoutId);
