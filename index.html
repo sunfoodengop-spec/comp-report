@@ -4159,6 +4159,7 @@ const PROD_FORMS = {
     sections: [
       { id: 'airline', type: 'checklist5', rowHeader: 'ตรวจเช็คการทำงานแอร์ในไลน์',
         cols: ['น้ำหยด','ถาดเดรน','ท่อเดรน','ไม่มีน้ำแข็งเกาะ','พัดลม'],
+        noteCol: 'พัดลม',
         rows: COMP52_AIRLINE_ROWS },
       { id: 'freezeRoom', type: 'hourly24', rowHeader: 'อุณหภูมิห้องฟรีส',
         hours: [9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2,3,4,5,6,7,8],
@@ -4377,13 +4378,21 @@ function renderProdSectionEdit(sec, shift) {
 
   if (sec.type === 'checklist5') {
     const rows = sec.rows.filter(r => r.s === shift);
+    const noteColSpan = sec.noteCol ? (sec.cols.length + 2) : (sec.cols.length + 1);
     html += '<tr><th style="min-width:150px;">' + escapeHtml(sec.rowHeader) + '</th>' +
-      sec.cols.map(c => '<th>' + escapeHtml(c) + '</th>').join('') + '</tr></thead><tbody>';
-    if (!rows.length) html += '<tr><td colspan="'+(sec.cols.length+1)+'" style="color:var(--muted);">ไม่มีรายการของกะนี้ในตารางนี้</td></tr>';
+      sec.cols.map(c => '<th>' + escapeHtml(c) + '</th>').join('') +
+      (sec.noteCol ? '<th style="min-width:110px;">หมายเหตุ (' + escapeHtml(sec.noteCol) + ')</th>' : '') +
+      '</tr></thead><tbody>';
+    if (!rows.length) html += '<tr><td colspan="'+noteColSpan+'" style="color:var(--muted);">ไม่มีรายการของกะนี้ในตารางนี้</td></tr>';
     rows.forEach((r, idx) => {
       const rowKey = r.l;
       html += '<tr><td class="prod-row-label">' + escapeHtml(r.l) + ' (กะ '+shift+')</td>' +
-        sec.cols.map(c => '<td>' + ixToggleHtml(sec.id, rowKey, c, prodCell(sec.id, rowKey, c)) + '</td>').join('') + '</tr>';
+        sec.cols.map(c => '<td>' + ixToggleHtml(sec.id, rowKey, c, prodCell(sec.id, rowKey, c)) + '</td>').join('');
+      if (sec.noteCol) {
+        const noteColKey = sec.noteCol + '__note';
+        html += '<td><input type="text" class="prod-note-input" data-sec="'+sec.id+'" data-row="'+escAttr(rowKey)+'" data-col="'+noteColKey+'" value="'+escapeHtml(prodCell(sec.id, rowKey, noteColKey))+'" placeholder="หมายเหตุ เช่น 2 ตัว"></td>';
+      }
+      html += '</tr>';
     });
     html += '</tbody>';
 
@@ -4407,7 +4416,7 @@ function renderProdSectionEdit(sec, shift) {
     sec.rows.forEach(r => {
       const rowKey = r.l;
       html += '<tr><td class="prod-row-label">' + escapeHtml(r.l) + '</td>' +
-        hours.map(h => '<td><input type="text" inputmode="decimal" data-sec="'+sec.id+'" data-row="'+escAttr(rowKey)+'" data-col="'+h+'" value="'+escapeHtml(prodCell(sec.id, rowKey, h))+'"></td>').join('') +
+        hours.map(h => '<td><input type="text" data-sec="'+sec.id+'" data-row="'+escAttr(rowKey)+'" data-col="'+h+'" value="'+escapeHtml(prodCell(sec.id, rowKey, h))+'"></td>').join('') +
         '</tr>';
     });
     html += '</tbody>';
@@ -4421,7 +4430,7 @@ function renderProdSectionEdit(sec, shift) {
       let cells = '';
       for (let i = 0; i < sec.fields.length; i++) {
         if (i < nFields) {
-          cells += '<td><input type="text" inputmode="decimal" data-sec="'+sec.id+'" data-row="'+escAttr(rowKey)+'" data-col="f'+i+'" value="'+escapeHtml(prodCell(sec.id, rowKey, 'f'+i))+'"></td>';
+          cells += '<td><input type="text" data-sec="'+sec.id+'" data-row="'+escAttr(rowKey)+'" data-col="f'+i+'" value="'+escapeHtml(prodCell(sec.id, rowKey, 'f'+i))+'"></td>';
         } else {
           cells += '<td style="color:var(--muted);">-</td>';
         }
@@ -4442,14 +4451,14 @@ function renderProdSectionEdit(sec, shift) {
         const cfLabel = sec.crustFreezerRows[idx] || '';
         if (cfLabel) {
           cf = '<td><input type="text" data-sec="'+sec.id+'" data-row="cf_'+escAttr(cfLabel)+'" data-col="time" value="'+escapeHtml(prodCell(sec.id,'cf_'+cfLabel,'time'))+'" placeholder="'+escapeHtml(cfLabel)+'"></td>' +
-               '<td><input type="text" inputmode="decimal" data-sec="'+sec.id+'" data-row="cf_'+escAttr(cfLabel)+'" data-col="temp" value="'+escapeHtml(prodCell(sec.id,'cf_'+cfLabel,'temp'))+'"></td>';
+               '<td><input type="text" data-sec="'+sec.id+'" data-row="cf_'+escAttr(cfLabel)+'" data-col="temp" value="'+escapeHtml(prodCell(sec.id,'cf_'+cfLabel,'temp'))+'"></td>';
         } else {
           cf = '<td></td><td></td>';
         }
       }
       html += '<tr><td class="prod-row-label">' + escapeHtml(label) + '</td>' +
-        '<td><input type="text" inputmode="decimal" data-sec="'+sec.id+'" data-row="'+escAttr(rowKey)+'" data-col="dp" value="'+escapeHtml(prodCell(sec.id, rowKey, 'dp'))+'"></td>' +
-        '<td><input type="text" inputmode="decimal" data-sec="'+sec.id+'" data-row="'+escAttr(rowKey)+'" data-col="lvl" value="'+escapeHtml(prodCell(sec.id, rowKey, 'lvl'))+'"></td>' +
+        '<td><input type="text" data-sec="'+sec.id+'" data-row="'+escAttr(rowKey)+'" data-col="dp" value="'+escapeHtml(prodCell(sec.id, rowKey, 'dp'))+'"></td>' +
+        '<td><input type="text" data-sec="'+sec.id+'" data-row="'+escAttr(rowKey)+'" data-col="lvl" value="'+escapeHtml(prodCell(sec.id, rowKey, 'lvl'))+'"></td>' +
         cf + '</tr>';
     });
     html += '</tbody>';
@@ -4792,6 +4801,13 @@ function openProductionView(reportType, dateStr) {
   const content = document.getElementById('prodViewContent');
   content.innerHTML = form.sections.map(sec => renderProdSectionView(sec, shiftRows)).join('');
 
+  const noteLines = collectProdReportNotes(form, shiftRows);
+  if (noteLines.length) {
+    content.innerHTML += '<div class="prod-section-title">📌 หมายเหตุเพิ่มเติม</div>' +
+      '<div class="prod-grid-wrap" style="padding:10px 14px;"><ul style="margin:0; padding-left:18px; font-size:12.5px; line-height:1.7;">' +
+      noteLines.map(l => '<li>' + escapeHtml(l) + '</li>').join('') + '</ul></div>';
+  }
+
   let sigHtml = '<div class="prod-view-sig-row">';
   ['A','B','C'].forEach(s => {
     const row = shiftRows[s];
@@ -4973,6 +4989,28 @@ function mergedCellFromRows(shiftRows, shift, sectionId, rowKey, colKey) {
   if (!row || !row.data || !row.data[sectionId] || !row.data[sectionId][rowKey]) return '';
   const v = row.data[sectionId][rowKey][colKey];
   return (v === undefined || v === null) ? '' : String(v);
+}
+
+/* รวมหมายเหตุทั้งหมดของวันนั้น (รวมทุกกะ) มาแสดงเป็นรายการเดียวใน Report:
+   1) หมายเหตุอิสระที่พิมพ์ไว้ท้ายฟอร์มแต่ละกะ (row.note)
+   2) หมายเหตุที่แนบไว้ข้างคอลัมน์พิเศษ (เช่น "พัดลม" ของฟอร์ม 5,2) — จัดรูปแบบ "ชื่อแถว x หมายเหตุ" */
+function collectProdReportNotes(form, shiftRows) {
+  const lines = [];
+  ['A','B','C'].forEach(s => {
+    const row = shiftRows[s];
+    if (row && row.note && String(row.note).trim()) {
+      lines.push('กะ' + PROD_SHIFT_LABEL[s] + ': ' + String(row.note).trim());
+    }
+  });
+  form.sections.forEach(sec => {
+    if (sec.type === 'checklist5' && sec.noteCol) {
+      sec.rows.forEach(r => {
+        const noteVal = mergedCellFromRows(shiftRows, r.s, sec.id, r.l, sec.noteCol + '__note');
+        if (noteVal && noteVal.trim()) lines.push(r.l + ' x ' + noteVal.trim());
+      });
+    }
+  });
+  return lines;
 }
 
 function pdfBar(doc, x, y, w, text, fontSize) {
@@ -5165,6 +5203,19 @@ function drawPdfHeader(doc, form, dateStr) {
   return 30;
 }
 
+function drawPdfNotes(doc, y, noteLines) {
+  if (!noteLines.length) return y;
+  const pageW = doc.internal.pageSize.getWidth();
+  const totalW = pageW - PDF_MARGIN * 2;
+  y = pdfBar(doc, PDF_MARGIN, y, totalW, '📌 หมายเหตุเพิ่มเติม', 8);
+  doc.setFont('Sarabun', 'normal'); doc.setFontSize(7.4); doc.setTextColor(40,40,40);
+  noteLines.forEach(line => {
+    y += 10;
+    doc.text('• ' + line, PDF_MARGIN + 4, y);
+  });
+  return y + 6;
+}
+
 function drawPdfFooter(doc, form, shiftRows, y) {
   const pageW = doc.internal.pageSize.getWidth();
   const totalW = pageW - PDF_MARGIN * 2;
@@ -5218,6 +5269,7 @@ function exportProductionDayPDF(reportType, dateStr) {
     let y = drawPdfHeader(doc, form, dateStr);
     y = pdfBar(doc, PDF_MARGIN, y, pageW - PDF_MARGIN * 2, form.title, 9.5);
     form.sections.forEach(sec => { y = sectionToPdf(doc, y + 3, sec, shiftRows) + 4; });
+    y = drawPdfNotes(doc, y, collectProdReportNotes(form, shiftRows));
     drawPdfFooter(doc, form, shiftRows, y);
 
     doc.save(form.key + '_' + dateStr + '.pdf');
