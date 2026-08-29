@@ -2533,14 +2533,31 @@ function todayDateStr() {
   return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
 }
 
+/* เวลาปัจจุบัน "ตามเวลาไทยจริง" — ไม่พึ่งการตั้งค่าโซนเวลาของเครื่องผู้ใช้เลย
+   ใช้ epoch UTC (Date.now(), เที่ยงตรงไม่ว่าตั้งค่าเครื่องเป็นโซนไหน) แล้วบวก 7 ชม.เอง
+   (ไทยไม่มี Daylight Saving เป็น UTC+7 คงที่ตลอดปี) จากนั้นอ่านค่าด้วย getUTC*() เท่านั้น
+   ห้ามใช้ getHours()/getDate() ธรรมดากับค่าที่ได้ เพราะจะโดนบวกโซนเวลาเครื่องซ้ำอีกชั้น */
+function nowInThailand() {
+  return new Date(Date.now() + 7 * 60 * 60 * 1000);
+}
+
 function currentProdWorkDateStr() {
   // "วันทำงาน" ของรายงานผลผลิตเริ่มกะ A ตอน 08:00 ไม่ใช่เที่ยงคืน — กะ C (ดึก จนถึง ~08:00)
   // เป็นช่วงเวลาที่ผ่านเที่ยงคืนของปฏิทินไปแล้วแต่ยังนับเป็น "วันเดียวกัน" กับกะ A/B ก่อนหน้า
   // ถ้าตอนนี้ยังไม่ถึง 08:00 ให้ default เป็นวันที่ของเมื่อวาน กันพนักงานกะดึก/เช้ามืดเจอวันที่ผิด
-  const d = new Date();
-  if (d.getHours() < 8) d.setDate(d.getDate() - 1);
+  const d = nowInThailand();
+  let y = d.getUTCFullYear(), m = d.getUTCMonth(), day = d.getUTCDate();
+  if (d.getUTCHours() < 8) {
+    const prev = new Date(Date.UTC(y, m, day - 1));
+    y = prev.getUTCFullYear(); m = prev.getUTCMonth(); day = prev.getUTCDate();
+  }
   const pad = n => String(n).padStart(2, '0');
-  return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+  return y + '-' + pad(m+1) + '-' + pad(day);
+}
+
+function currentProdShift() {
+  // เดากะปัจจุบันจากเวลาไทยจริง ให้ตรงกับตารางกะ A/B/C ที่ใช้แบ่งคอลัมน์เวลาในฟอร์มอยู่แล้ว
+  return prodShiftOfHour(nowInThailand().getUTCHours());
 }
 
 function roundBadgeHtml(status, lateMin, roundHour) {
@@ -4373,14 +4390,23 @@ function selectProdForm(key) {
   // เองล่วงหน้าก่อนโค้ดนี้ทำงาน ทำให้เช็ค "ถ้าว่าง" ไม่เจอว่าว่างและข้ามการตั้งค่าที่ถูกต้องไป
   document.getElementById('prodDateInput').value = currentProdWorkDateStr();
   updateLoggedInAsDisplays();
-  prodShift = 'A';
+  prodShift = currentProdShift(); // เลือกกะให้อัตโนมัติตามเวลาไทยจริง ผู้ใช้ยังกดสลับแท็บกะเองได้ตามปกติ
   loadProdDayRows();
   renderProdShiftTabs();
   renderProdSections();
 }
 
-document.getElementById('prodDateInput').addEventListener('change', () => {
+document.getElementById('prodDateInput').addEventListener('change', function() {
   if (!prodFormKey) return;
+  const autoDate = currentProdWorkDateStr();
+  if (this.value !== autoDate) {
+    const ok = confirm(
+      'คุณกำลังจะบันทึกข้อมูลเป็นวันที่ ' + fmtProdDateShort(this.value) +
+      ' ซึ่งไม่ใช่วันทำงานปัจจุบันที่ระบบคำนวณให้ (' + fmtProdDateShort(autoDate) + ')\n\n' +
+      'ถ้าตั้งใจกรอกย้อนหลัง/ล่วงหน้าจริง กด OK เพื่อยืนยัน — ถ้ากดผิด กด ยกเลิก เพื่อกลับไปวันที่ปัจจุบัน'
+    );
+    if (!ok) { this.value = autoDate; return; }
+  }
   loadProdDayRows();
 });
 
