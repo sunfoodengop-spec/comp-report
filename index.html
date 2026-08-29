@@ -396,6 +396,7 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
   .prod-hist-card-actions button { flex:1; padding:9px; border-radius:8px; border:1px solid var(--accent); background:var(--panel); color:var(--accent); font-weight:700; font-size:12.5px; cursor:pointer; }
   .prod-hist-card-actions button.secondary { border-color:var(--border); color:var(--text); }
   .prod-hist-card-actions button.danger { border-color:var(--red); color:var(--red); flex:0 0 auto; padding-left:12px; padding-right:12px; }
+  .prod-move-btn { border:none; background:none; cursor:pointer; font-size:12px; padding:0 0 0 4px; vertical-align:middle; }
   .prod-view-sig-row { display:flex; gap:22px; flex-wrap:wrap; margin-top:16px; padding-top:14px; border-top:1px dashed var(--border); }
   .prod-view-sig-row .slot { display:flex; flex-direction:column; align-items:center; gap:4px; }
   .prod-view-sig-row .slot img { height:44px; background:var(--panel2); border-radius:6px; }
@@ -886,6 +887,26 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
         <option value="30" selected>30 วันล่าสุด</option>
         <option value="all">ทั้งหมด</option>
       </select>
+    </div>
+    <div class="prod-hist-card" id="prodMovePanel" style="display:none; border:2px solid var(--accent);">
+      <div class="prod-hist-title">🔀 ย้ายวันที่/กะ</div>
+      <div style="font-size:12px; color:var(--muted); margin-bottom:10px;" id="prodMoveSourceLabel"></div>
+      <div class="two-col">
+        <div class="field"><label>วันที่ใหม่</label><input type="date" id="prodMoveNewDate"></div>
+        <div class="field"><label>กะใหม่</label>
+          <select id="prodMoveNewShift">
+            <option value="A">เช้า (A)</option>
+            <option value="B">บ่าย (B)</option>
+            <option value="C">ดึก (C)</option>
+          </select>
+        </div>
+      </div>
+      <div style="font-size:11.5px; color:var(--muted); margin:6px 0;">ถ้าปลายทางมีข้อมูลอยู่แล้ว ระบบจะ<b>รวมข้อมูลให้อัตโนมัติ</b> (ไม่ทับ ไม่ให้ข้อมูลหาย รวมทั้งชื่อผู้กรอก/ลายเซ็น/หมายเหตุ)</div>
+      <div id="prodMoveWarn" style="font-size:12px; color:var(--red); display:none; margin:6px 0;"></div>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <button class="save-std-btn" id="prodMoveConfirmBtn" style="flex:1;">✅ ยืนยันย้าย</button>
+        <button class="emp-btn" id="prodMoveCancelBtn">ยกเลิก</button>
+      </div>
     </div>
     <div id="prodHistoryList"><div class="loading-text">กำลังโหลด...</div></div>
   </div>
@@ -4695,7 +4716,12 @@ function renderProductionHistory() {
     const form = PROD_FORMS[g.report_type];
     const shiftBadges = ['A','B','C'].map(s => {
       const done = !!g.shifts[s];
-      return '<div class="prod-hist-shift-badge' + (done?' done':'') + '">' + PROD_SHIFT_LABEL[s] + (done ? ' ✅' : ' —') + '</div>';
+      let html = '<div class="prod-hist-shift-badge' + (done?' done':'') + '">' + PROD_SHIFT_LABEL[s] + (done ? ' ✅' : ' —');
+      if (done && isAdminUnlocked()) {
+        html += ' <button type="button" class="prod-move-btn" data-move-id="' + g.shifts[s].id + '" data-move-type="' + g.report_type + '" data-move-date="' + g.report_date + '" data-move-shift="' + s + '" title="ย้ายวันที่/กะ">🔀</button>';
+      }
+      html += '</div>';
+      return html;
     }).join('');
     const deleteBtn = isAdminUnlocked()
       ? '<button class="danger" data-del-type="' + g.report_type + '" data-del-date="' + g.report_date + '">🗑 ลบ</button>'
@@ -4730,6 +4756,12 @@ function renderProductionHistory() {
       deleteProductionRows(ids);
     });
   });
+  list.querySelectorAll('.prod-move-btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      openProdMovePanel(this.dataset.moveId, this.dataset.moveType, this.dataset.moveDate, this.dataset.moveShift);
+    });
+  });
 }
 
 function fmtProdDateShort(dateStr) {
@@ -4749,6 +4781,115 @@ function deleteProductionRows(ids, doneMsg) {
     })
     .catch(err => alert('เชื่อมต่อไม่ได้: ' + (err.message || err)));
 }
+
+/* ================================================================
+ * ย้ายวันที่/กะของบันทึกผลผลิต (แอดมินเท่านั้น) — ถ้าปลายทางมีข้อมูลอยู่แล้ว
+ * จะรวมข้อมูล (data/ผู้กรอก+ลายเซ็น/หมายเหตุ) เข้าด้วยกันแบบไม่ให้ข้อมูลหาย
+ * แทนการเขียนทับ (เทียบเท่ากับสคริปต์ SQL merge ที่เคยใช้มือ แต่ทำในแอปแทน)
+ * ================================================================ */
+function deepMergeJson(a, b) {
+  const aIsObj = a && typeof a === 'object' && !Array.isArray(a);
+  const bIsObj = b && typeof b === 'object' && !Array.isArray(b);
+  if (aIsObj && bIsObj) {
+    const result = Object.assign({}, a);
+    Object.keys(b).forEach(k => { result[k] = (k in a) ? deepMergeJson(a[k], b[k]) : b[k]; });
+    return result;
+  }
+  return (b !== undefined && b !== null && b !== '') ? b : a;
+}
+function mergeProdContributors(a, b) {
+  const all = (Array.isArray(a) ? a : []).concat(Array.isArray(b) ? b : []);
+  const map = {};
+  all.forEach(c => {
+    const key = String(c.employee_id);
+    if (!map[key] || (c.first_saved_at && map[key].first_saved_at && c.first_saved_at < map[key].first_saved_at)) {
+      map[key] = c;
+    }
+  });
+  return Object.values(map);
+}
+function mergeProdNotes(a, b) {
+  a = (a || '').trim(); b = (b || '').trim();
+  if (a && b) return a + '\n' + b;
+  return a || b || null;
+}
+
+function moveProdRowDate(rowId, reportType, newDate, newShift) {
+  return withRetry(() => getSbClient().from('production_reports').select('*').eq('id', rowId).single())
+    .then(({ data: srcRow, error }) => {
+      if (error) throw new Error(error.message);
+      return withRetry(() => getSbClient().from('production_reports').select('*')
+        .eq('report_type', reportType).eq('report_date', newDate).eq('shift', newShift)
+      ).then(({ data: destRows, error: err2 }) => {
+        if (err2) throw new Error(err2.message);
+        const destRow = destRows && destRows[0];
+        if (!destRow) {
+          // ไม่มีอะไรอยู่ที่ปลายทาง — ย้ายตรงๆ ได้เลย
+          return withRetry(() => getSbClient().from('production_reports')
+            .update({ report_date: newDate, shift: newShift })
+            .eq('id', rowId));
+        }
+        // มีข้อมูลอยู่แล้วที่ปลายทาง (ไม่ว่าจะ active หรือเคยลบไว้) — รวมข้อมูลเข้าแถวนั้นแทนเขียนทับ
+        const mergedData = deepMergeJson(destRow.data || {}, srcRow.data || {});
+        const mergedContributors = mergeProdContributors(destRow.contributors, srcRow.contributors);
+        const mergedNote = mergeProdNotes(destRow.note, srcRow.note);
+        return withRetry(() => getSbClient().from('production_reports')
+          .update({ data: mergedData, contributors: mergedContributors, note: mergedNote, is_active: true })
+          .eq('id', destRow.id)
+        ).then(() => withRetry(() => getSbClient().from('production_reports')
+          .update({ is_active: false })
+          .eq('id', rowId)));
+      });
+    });
+}
+
+let prodMoveSource = null;
+function openProdMovePanel(id, reportType, oldDate, oldShift) {
+  prodMoveSource = { id, reportType, oldDate, oldShift };
+  const form = PROD_FORMS[reportType];
+  document.getElementById('prodMoveSourceLabel').textContent =
+    (form ? form.title : reportType) + ' — เดิม: ' + fmtProdDateShort(oldDate) + ' กะ' + PROD_SHIFT_LABEL[oldShift];
+  document.getElementById('prodMoveNewDate').value = oldDate;
+  document.getElementById('prodMoveNewShift').value = oldShift;
+  document.getElementById('prodMoveWarn').style.display = 'none';
+  const panel = document.getElementById('prodMovePanel');
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+document.getElementById('prodMoveCancelBtn').addEventListener('click', () => {
+  document.getElementById('prodMovePanel').style.display = 'none';
+  prodMoveSource = null;
+});
+document.getElementById('prodMoveConfirmBtn').addEventListener('click', function() {
+  if (!prodMoveSource) return;
+  const newDate = document.getElementById('prodMoveNewDate').value;
+  const newShift = document.getElementById('prodMoveNewShift').value;
+  const warn = document.getElementById('prodMoveWarn');
+  warn.style.display = 'none';
+  if (!newDate) { warn.textContent = 'กรุณาเลือกวันที่'; warn.style.display = 'block'; return; }
+  if (newDate === prodMoveSource.oldDate && newShift === prodMoveSource.oldShift) {
+    warn.textContent = 'วันที่/กะใหม่เหมือนเดิม ไม่มีอะไรต้องย้าย'; warn.style.display = 'block'; return;
+  }
+  if (!confirm('ยืนยันย้ายข้อมูลจาก ' + fmtProdDateShort(prodMoveSource.oldDate) + ' กะ' + PROD_SHIFT_LABEL[prodMoveSource.oldShift] +
+    ' ไปเป็น ' + fmtProdDateShort(newDate) + ' กะ' + PROD_SHIFT_LABEL[newShift] +
+    '?\n\nถ้าปลายทางมีข้อมูลอยู่แล้ว ระบบจะรวมข้อมูลให้อัตโนมัติ ไม่ทับ ไม่ให้ข้อมูลหาย')) return;
+
+  const btn = this;
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = 'กำลังย้าย...';
+
+  moveProdRowDate(prodMoveSource.id, prodMoveSource.reportType, newDate, newShift)
+    .then(() => {
+      btn.disabled = false; btn.textContent = orig;
+      document.getElementById('prodMovePanel').style.display = 'none';
+      prodMoveSource = null;
+      loadProductionHistory({});
+    })
+    .catch(err => {
+      btn.disabled = false; btn.textContent = orig;
+      warn.textContent = 'ย้ายไม่สำเร็จ: ' + (err.message || err); warn.style.display = 'block';
+    });
+});
 
 /* ---------- chip-row toggle: รายการ / กราฟแนวโน้ม ---------- */
 document.querySelectorAll('#view-production-history .chip[data-histtab]').forEach(chip => {
