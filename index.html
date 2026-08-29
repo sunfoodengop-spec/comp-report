@@ -842,7 +842,7 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
     </div>
     <div class="field">
       <label>วันที่</label>
-      <input type="date" id="prodDateInput">
+      <input type="date" id="prodDateInput" autocomplete="off">
     </div>
 
     <div class="prod-shift-tabs" id="prodShiftTabs">
@@ -4347,9 +4347,10 @@ function selectProdForm(key) {
     document.getElementById('prodFormBody').style.display = 'none';
     prodFormKey = null;
   });
-  if (!document.getElementById('prodDateInput').value) {
-    document.getElementById('prodDateInput').value = currentProdWorkDateStr();
-  }
+  // ตั้งวันที่เป็น "วันทำงาน" ปัจจุบันเสมอทุกครั้งที่เข้าฟอร์มใหม่ (ไม่เช็คว่าช่องว่างก่อน)
+  // เพราะบางเบราว์เซอร์/มือถือจะ auto-fill ช่อง <input type="date"> ด้วยวันที่ปฏิทินของเครื่อง
+  // เองล่วงหน้าก่อนโค้ดนี้ทำงาน ทำให้เช็ค "ถ้าว่าง" ไม่เจอว่าว่างและข้ามการตั้งค่าที่ถูกต้องไป
+  document.getElementById('prodDateInput').value = currentProdWorkDateStr();
   updateLoggedInAsDisplays();
   prodShift = 'A';
   loadProdDayRows();
