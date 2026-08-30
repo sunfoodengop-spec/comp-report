@@ -5445,17 +5445,19 @@ document.getElementById('formEditResetBtn').addEventListener('click', () => {
 });
 
 function pdfBar(doc, x, y, w, text, fontSize) {
+  fontSize = fontSize || 8.5;
+  const barH = Math.max(8, 13 * (fontSize / 8.5));
   doc.setFillColor(58, 53, 50);
-  doc.rect(x, y, w, 13, 'F');
+  doc.rect(x, y, w, barH, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFont('Sarabun', 'bold');
-  doc.setFontSize(fontSize || 8.5);
-  doc.text(text, x + w / 2, y + 9, { align: 'center' });
+  doc.setFontSize(fontSize);
+  doc.text(text, x + w / 2, y + barH * 0.7, { align: 'center' });
   doc.setTextColor(20, 20, 20);
-  return y + 13;
+  return y + barH;
 }
 
-const PDF_GRID_STYLES = { font: 'Sarabun', fontSize: 6.4, cellPadding: 1.4, lineColor: [90,90,90], lineWidth: 0.35, textColor: [20,20,20], valign: 'middle' };
+const PDF_GRID_STYLES = { font: 'Sarabun', fontSize: 6.4, cellPadding: 1.1, lineColor: [90,90,90], lineWidth: 0.35, textColor: [20,20,20], valign: 'middle' };
 const PDF_HEAD_STYLES = { fillColor: [234,230,227], textColor: [20,20,20], fontStyle: 'bold', font: 'Sarabun' };
 
 function drawChecklist5(doc, y, sec, shiftRows) {
@@ -5484,7 +5486,7 @@ function drawChecklist5(doc, y, sec, shiftRows) {
       margin: { left: x, right: pageW - x - blockW },
       tableWidth: blockW,
       head, body,
-      styles: Object.assign({}, PDF_GRID_STYLES, { fontSize: 5.2, cellPadding: 0.9 }),
+      styles: Object.assign({}, PDF_GRID_STYLES, { fontSize: 5.0, cellPadding: 0.6 }),
       headStyles: Object.assign({}, PDF_HEAD_STYLES, { fontSize: 5.0 }),
       columnStyles: colStyles,
       theme: 'grid'
@@ -5634,21 +5636,51 @@ function drawPdfHeader(doc, form, dateStr) {
   return 30;
 }
 
-function drawPdfNotes(doc, y, noteLines) {
+/* ประเมินความสูงที่ "หมายเหตุ" และ "ลายเซ็น" ต้องใช้ ก่อนวาดจริง เพื่อเทียบกับพื้นที่ที่เหลือ
+   บนหน้ากระดาษจริง (วัดจาก y ปัจจุบันหลังวาดตารางทั้งหมดแล้ว ไม่ใช่การเดาตายตัว) แล้วคำนวณ
+   ตัวคูณย่อขนาด (scale) ให้พอดีเสมอ ไม่ว่าตารางด้านบนจะกินพื้นที่มากแค่ไหนก็ตาม */
+function estimateProdNotesHeight(doc, noteLines, totalW, fontSize, lineHeight) {
+  if (!noteLines.length) return 0;
+  const numCols = noteLines.length > 16 ? 3 : (noteLines.length > 6 ? 2 : 1);
+  const colW = totalW / numCols;
+  const rowsPerCol = Math.ceil(noteLines.length / numCols);
+  doc.setFont('Sarabun', 'normal'); doc.setFontSize(fontSize);
+  let maxLines = 0;
+  for (let col = 0; col < numCols; col++) {
+    let lines = 0;
+    const sliceStart = col * rowsPerCol;
+    const sliceEnd = Math.min(sliceStart + rowsPerCol, noteLines.length);
+    for (let i = sliceStart; i < sliceEnd; i++) lines += doc.splitTextToSize('• ' + noteLines[i], colW - 6).length;
+    maxLines = Math.max(maxLines, lines);
+  }
+  return 9 + maxLines * lineHeight + 4;
+}
+function estimateProdFooterHeight(shiftRows, rowH) {
+  let maxRows = 1;
+  ['A','B','C'].forEach(s => {
+    const contributors = (shiftRows[s] && Array.isArray(shiftRows[s].contributors)) ? shiftRows[s].contributors : [];
+    const subCols = contributors.length > 4 ? 2 : 1;
+    maxRows = Math.max(maxRows, Math.ceil(Math.max(contributors.length, 1) / subCols));
+  });
+  return 32 + 14 + maxRows * rowH;
+}
+
+function drawPdfNotes(doc, y, noteLines, scale) {
   if (!noteLines.length) return y;
+  scale = scale || 1;
   const pageW = doc.internal.pageSize.getWidth();
   const totalW = pageW - PDF_MARGIN * 2;
-  y = pdfBar(doc, PDF_MARGIN, y, totalW, '📌 หมายเหตุเพิ่มเติม', 8);
+  y = pdfBar(doc, PDF_MARGIN, y, totalW, '📌 หมายเหตุเพิ่มเติม', Math.max(6, 8 * scale));
 
   // แบ่งเป็นหลายคอลัมน์ตามจำนวนบรรทัด กันหมายเหตุเยอะๆ ไหลยาวจนล้นหน้ากระดาษ
   const numCols = noteLines.length > 16 ? 3 : (noteLines.length > 6 ? 2 : 1);
   const colW = totalW / numCols;
   const rowsPerCol = Math.ceil(noteLines.length / numCols);
-  const lineHeight = 9.5;
-  const fontSize = 7.2;
+  const lineHeight = 9.5 * scale;
+  const fontSize = Math.max(5.2, 7.2 * scale);
 
   doc.setFont('Sarabun', 'normal'); doc.setFontSize(fontSize); doc.setTextColor(40,40,40);
-  const startY = y + 9;
+  const startY = y + 9 * scale;
   let maxBottom = startY;
   for (let col = 0; col < numCols; col++) {
     let cy = startY;
@@ -5661,17 +5693,18 @@ function drawPdfNotes(doc, y, noteLines) {
     }
     maxBottom = Math.max(maxBottom, cy);
   }
-  return maxBottom + 4;
+  return maxBottom + 4 * scale;
 }
 
-function drawPdfFooter(doc, form, shiftRows, y) {
+function drawPdfFooter(doc, form, shiftRows, y, scale) {
+  scale = scale || 1;
   const pageW = doc.internal.pageSize.getWidth();
   const totalW = pageW - PDF_MARGIN * 2;
-  doc.setFont('Sarabun', 'normal'); doc.setFontSize(7.3); doc.setTextColor(20,20,20);
-  doc.text('หมายเหตุ:การจดบันทึกต้องระบุเวลาครบทุกช่อง', PDF_MARGIN, y + 10);
-  doc.setFont('Sarabun', 'bold'); doc.setFontSize(8);
-  doc.text(form.footerSign, PDF_MARGIN, y + 24);
-  y += 32;
+  doc.setFont('Sarabun', 'normal'); doc.setFontSize(Math.max(5.5, 7.3 * scale)); doc.setTextColor(20,20,20);
+  doc.text('หมายเหตุ:การจดบันทึกต้องระบุเวลาครบทุกช่อง', PDF_MARGIN, y + 10 * scale);
+  doc.setFont('Sarabun', 'bold'); doc.setFontSize(Math.max(6, 8 * scale));
+  doc.text(form.footerSign, PDF_MARGIN, y + 24 * scale);
+  y += 32 * scale;
 
   const shiftColW = totalW / 3;
   let maxBottom = y;
@@ -5680,13 +5713,13 @@ function drawPdfFooter(doc, form, shiftRows, y) {
     const row = shiftRows[s];
     const contributors = (row && Array.isArray(row.contributors)) ? row.contributors : [];
 
-    doc.setFont('Sarabun', 'bold'); doc.setFontSize(9); doc.setTextColor(20,20,20);
+    doc.setFont('Sarabun', 'bold'); doc.setFontSize(Math.max(6, 9 * scale)); doc.setTextColor(20,20,20);
     doc.text('กะ' + PROD_SHIFT_LABEL[s], shiftX, y);
 
     if (!contributors.length) {
-      doc.setFont('Sarabun', 'normal'); doc.setFontSize(8); doc.setTextColor(120,120,120);
-      doc.text('(ยังไม่มีใครบันทึก)', shiftX, y + 14);
-      maxBottom = Math.max(maxBottom, y + 14);
+      doc.setFont('Sarabun', 'normal'); doc.setFontSize(Math.max(5.5, 8 * scale)); doc.setTextColor(120,120,120);
+      doc.text('(ยังไม่มีใครบันทึก)', shiftX, y + 14 * scale);
+      maxBottom = Math.max(maxBottom, y + 14 * scale);
       return;
     }
 
@@ -5695,13 +5728,13 @@ function drawPdfFooter(doc, form, shiftRows, y) {
     const subCols = contributors.length > 4 ? 2 : 1;
     const subColW = shiftColW / subCols;
     const perSubCol = Math.ceil(contributors.length / subCols);
-    const sigW = subCols > 1 ? 46 : 62, sigH = subCols > 1 ? 16 : 22;
-    const rowH = subCols > 1 ? 22 : 28;
-    const nameFontSize = subCols > 1 ? 7.5 : 9;
+    const sigW = (subCols > 1 ? 46 : 62) * scale, sigH = (subCols > 1 ? 16 : 22) * scale;
+    const rowH = (subCols > 1 ? 22 : 28) * scale;
+    const nameFontSize = Math.max(5.2, (subCols > 1 ? 7.5 : 9) * scale);
 
-    let localBottom = y + 14;
+    let localBottom = y + 14 * scale;
     for (let sc = 0; sc < subCols; sc++) {
-      let cy = y + 14;
+      let cy = y + 14 * scale;
       const cx = shiftX + sc * subColW;
       const sliceStart = sc * perSubCol;
       const sliceEnd = Math.min(sliceStart + perSubCol, contributors.length);
@@ -5739,11 +5772,33 @@ function exportProductionDayPDF(reportType, dateStr) {
     doc.setFont('Sarabun', 'normal');
 
     const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const totalW = pageW - PDF_MARGIN * 2;
     let y = drawPdfHeader(doc, form, dateStr);
-    y = pdfBar(doc, PDF_MARGIN, y, pageW - PDF_MARGIN * 2, form.title, 9.5);
-    form.sections.forEach(sec => { y = sectionToPdf(doc, y + 3, sec, shiftRows) + 4; });
-    y = drawPdfNotes(doc, y, collectProdReportNotes(form, shiftRows));
-    drawPdfFooter(doc, form, shiftRows, y);
+    y = pdfBar(doc, PDF_MARGIN, y, totalW, form.title, 9.5);
+    form.sections.forEach(sec => { y = sectionToPdf(doc, y + 2, sec, shiftRows) + 2; });
+
+    // วัดพื้นที่ที่เหลือจริงบนหน้ากระดาษ (ไม่เดา) แล้วย่อขนาดหมายเหตุ+ลายเซ็นให้พอดีเสมอ
+    const noteLines = collectProdReportNotes(form, shiftRows);
+    const neededNotes = estimateProdNotesHeight(doc, noteLines, totalW, 7.2, 9.5);
+    const neededFooter = estimateProdFooterHeight(shiftRows, 28);
+    const available = pageH - PDF_MARGIN - y - 6;
+    const totalNeeded = neededNotes + neededFooter;
+
+    let scale = 1;
+    if (totalNeeded > available && totalNeeded > 0) {
+      scale = available / totalNeeded;
+      if (scale < 0.45) {
+        // ตารางด้านบนกินพื้นที่จนเหลือน้อยเกินกว่าจะย่อให้ยังอ่านออกได้ — กรณีนี้พบยากมาก
+        // (ต้องมีทั้งหมายเหตุเยอะมากและผู้กรอกหลายคนพร้อมกัน) ขึ้นหน้าใหม่ให้ส่วนนี้แทนการย่อจนอ่านไม่ออก
+        doc.addPage();
+        y = PDF_MARGIN;
+        scale = 1;
+      }
+    }
+
+    y = drawPdfNotes(doc, y, noteLines, scale);
+    drawPdfFooter(doc, form, shiftRows, y, scale);
 
     doc.save(form.key + '_' + dateStr + '.pdf');
   } catch (err) {
