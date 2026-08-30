@@ -923,7 +923,7 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
         </select>
       </div>
       <div class="field">
-        <label>รายการ (ค่าเฉลี่ยต่อวัน จากทุกกะที่มีข้อมูล)</label>
+        <label>รายการ (แสดงค่าจริงตามเวลา/กะที่จด)</label>
         <select id="prodChartSeriesSelect"></select>
       </div>
       <div class="two-col">
@@ -5074,7 +5074,7 @@ function buildProdNumericSeriesList(form) {
   const list = [];
   form.sections.forEach(sec => {
     if (sec.type === 'hourly24' || sec.type === 'checkpoint') {
-      sec.rows.forEach(r => list.push({ sectionId: sec.id, rowKey: r.l, colKey: null, label: sec.rowHeader + ' — ' + r.l }));
+      sec.rows.forEach(r => list.push({ sectionId: sec.id, rowKey: r.l, colKey: null, label: sec.rowHeader + ' — ' + r.l, hoursOrder: sec.hours }));
     } else if (sec.type === 'shiftFields') {
       sec.rows.forEach(r => {
         const nFields = r.single ? 1 : (r.noLastField ? sec.fields.length - 1 : sec.fields.length);
@@ -5133,33 +5133,55 @@ document.getElementById('prodChartGenerateBtn').addEventListener('click', functi
 });
 
 function renderProdTrendChart(rows, series) {
+  // สร้างจุดข้อมูลทีละค่าจริงตามเวลา/กะที่จดไว้จริง (ไม่เฉลี่ยรวมเป็นค่าเดียวต่อวันอีกต่อไป)
   const byDate = {};
   rows.forEach(r => { if (!byDate[r.report_date]) byDate[r.report_date] = []; byDate[r.report_date].push(r); });
   const dates = Object.keys(byDate).sort();
 
-  const values = dates.map(d => {
-    const dayRows = byDate[d];
-    let vals = [];
-    dayRows.forEach(row => {
+  const SHIFT_ORDER = { A: 0, B: 1, C: 2 };
+  const points = []; // { sortKey, label, value }
+
+  dates.forEach((d, dayIdx) => {
+    byDate[d].forEach(row => {
       if (!row.data || !row.data[series.sectionId] || !row.data[series.sectionId][series.rowKey]) return;
       const cellObj = row.data[series.sectionId][series.rowKey];
       if (series.colKey) {
+        // ประเภทค่าต่อกะ (High Receiver / กำลังการผลิต ฯลฯ — ไม่มีคอลัมน์เวลาย่อย) จุดเดียวต่อกะ
         const n = parseFloat(cellObj[series.colKey]);
-        if (!isNaN(n)) vals.push(n);
+        if (isNaN(n)) return;
+        const shiftIdx = (SHIFT_ORDER[row.shift] !== undefined) ? SHIFT_ORDER[row.shift] : 9;
+        points.push({
+          sortKey: dayIdx * 1000 + shiftIdx,
+          label: fmtProdDateShort(d) + ' (กะ' + (PROD_SHIFT_LABEL[row.shift] || row.shift) + ')',
+          value: n
+        });
       } else {
-        Object.values(cellObj).forEach(v => { const n = parseFloat(v); if (!isNaN(n)) vals.push(n); });
+        // ประเภทตามคอลัมน์เวลา — แยกจุดตามทุกชั่วโมงที่มีค่าจริง เรียงตามลำดับเวลาในฟอร์ม (9,...,23,0,...,8)
+        const hoursOrder = series.hoursOrder || Object.keys(cellObj).map(Number);
+        hoursOrder.forEach((h, hIdx) => {
+          const v = cellObj[h];
+          if (v === undefined || v === null || v === '') return;
+          const n = parseFloat(v);
+          if (isNaN(n)) return;
+          points.push({
+            sortKey: dayIdx * 1000 + hIdx,
+            label: fmtProdDateShort(d) + ' ' + h + ':00',
+            value: n
+          });
+        });
       }
     });
-    return vals.length ? (vals.reduce((a,b)=>a+b,0) / vals.length) : null;
   });
+
+  points.sort((a, b) => a.sortKey - b.sortKey);
 
   const ctx = document.getElementById('prodTrendChart').getContext('2d');
   if (prodTrendChartInstance) prodTrendChartInstance.destroy();
   prodTrendChartInstance = new Chart(ctx, {
     type: 'line',
-    data: { labels: dates.map(fmtProdDateShort), datasets: [{
+    data: { labels: points.map(p => p.label), datasets: [{
       label: series.label,
-      data: values,
+      data: points.map(p => p.value),
       borderColor: CHART_COLORS[0],
       backgroundColor: CHART_COLORS[0],
       tension: 0.25, spanGaps: true, pointRadius: 3, pointHoverRadius: 5, borderWidth: 2
@@ -5169,12 +5191,12 @@ function renderProdTrendChart(rows, series) {
       devicePixelRatio: 3,
       interaction: { mode:'index', intersect:false },
       plugins: {
-        title: { display:true, text: series.label + ' (ค่าเฉลี่ยต่อวัน)', font:{size:14,weight:'bold'}, padding:{bottom:12} },
+        title: { display:true, text: series.label + ' (ค่าจริงตามเวลาที่จด)', font:{size:14,weight:'bold'}, padding:{bottom:12} },
         legend: { display:false },
-        datalabels: { display: dates.length <= 60, align:'top', anchor:'end', font:{size:9,weight:'600'}, color:'#333', formatter: v => (v===null||v===undefined)?'':Math.round(v*100)/100 }
+        datalabels: { display: points.length <= 60, align:'top', anchor:'end', font:{size:9,weight:'600'}, color:'#333', formatter: v => (v===null||v===undefined)?'':Math.round(v*100)/100 }
       },
       scales: {
-        x: { ticks:{font:{size:9.5}, maxRotation:60, minRotation:40} },
+        x: { ticks:{font:{size:8.5}, maxRotation:70, minRotation:50, autoSkip:true, maxTicksLimit:24} },
         y: { type:'linear' }
       }
     },
