@@ -5639,12 +5639,29 @@ function drawPdfNotes(doc, y, noteLines) {
   const pageW = doc.internal.pageSize.getWidth();
   const totalW = pageW - PDF_MARGIN * 2;
   y = pdfBar(doc, PDF_MARGIN, y, totalW, '📌 หมายเหตุเพิ่มเติม', 8);
-  doc.setFont('Sarabun', 'normal'); doc.setFontSize(7.4); doc.setTextColor(40,40,40);
-  noteLines.forEach(line => {
-    y += 10;
-    doc.text('• ' + line, PDF_MARGIN + 4, y);
-  });
-  return y + 6;
+
+  // แบ่งเป็นหลายคอลัมน์ตามจำนวนบรรทัด กันหมายเหตุเยอะๆ ไหลยาวจนล้นหน้ากระดาษ
+  const numCols = noteLines.length > 16 ? 3 : (noteLines.length > 6 ? 2 : 1);
+  const colW = totalW / numCols;
+  const rowsPerCol = Math.ceil(noteLines.length / numCols);
+  const lineHeight = 9.5;
+  const fontSize = 7.2;
+
+  doc.setFont('Sarabun', 'normal'); doc.setFontSize(fontSize); doc.setTextColor(40,40,40);
+  const startY = y + 9;
+  let maxBottom = startY;
+  for (let col = 0; col < numCols; col++) {
+    let cy = startY;
+    const colX = PDF_MARGIN + col * colW + 2;
+    const sliceStart = col * rowsPerCol;
+    const sliceEnd = Math.min(sliceStart + rowsPerCol, noteLines.length);
+    for (let i = sliceStart; i < sliceEnd; i++) {
+      const wrapped = doc.splitTextToSize('• ' + noteLines[i], colW - 6);
+      wrapped.forEach(line => { doc.text(line, colX, cy); cy += lineHeight; });
+    }
+    maxBottom = Math.max(maxBottom, cy);
+  }
+  return maxBottom + 4;
 }
 
 function drawPdfFooter(doc, form, shiftRows, y) {
@@ -5654,30 +5671,55 @@ function drawPdfFooter(doc, form, shiftRows, y) {
   doc.text('หมายเหตุ:การจดบันทึกต้องระบุเวลาครบทุกช่อง', PDF_MARGIN, y + 10);
   doc.setFont('Sarabun', 'bold'); doc.setFontSize(8);
   doc.text(form.footerSign, PDF_MARGIN, y + 24);
+  y += 32;
 
-  const colW = totalW / 3;
+  const shiftColW = totalW / 3;
+  let maxBottom = y;
   ['A','B','C'].forEach((s, i) => {
-    const x = PDF_MARGIN + i * colW;
+    const shiftX = PDF_MARGIN + i * shiftColW;
     const row = shiftRows[s];
     const contributors = (row && Array.isArray(row.contributors)) ? row.contributors : [];
-    let cy = y + 36;
-    doc.setFont('Sarabun', 'bold'); doc.setFontSize(8.5); doc.setTextColor(20,20,20);
-    doc.text('กะ' + PROD_SHIFT_LABEL[s], x, cy);
-    cy += 16;
+
+    doc.setFont('Sarabun', 'bold'); doc.setFontSize(9); doc.setTextColor(20,20,20);
+    doc.text('กะ' + PROD_SHIFT_LABEL[s], shiftX, y);
+
     if (!contributors.length) {
-      doc.setFont('Sarabun', 'normal'); doc.setFontSize(7.5); doc.setTextColor(120,120,120);
-      doc.text('(ยังไม่มีใครบันทึก)', x, cy);
-    } else {
-      contributors.forEach(c => {
-        if (c.signature_data) {
-          try { doc.addImage(c.signature_data, 'PNG', x, cy - 15, 70, 26); } catch (e) { /* ข้ามถ้าภาพเสีย */ }
-        }
-        doc.setFont('Sarabun', 'normal'); doc.setFontSize(9); doc.setTextColor(40,40,40);
-        doc.text(c.emp_name || '', x + 76, cy);
-        cy += 30;
-      });
+      doc.setFont('Sarabun', 'normal'); doc.setFontSize(8); doc.setTextColor(120,120,120);
+      doc.text('(ยังไม่มีใครบันทึก)', shiftX, y + 14);
+      maxBottom = Math.max(maxBottom, y + 14);
+      return;
     }
+
+    // ถ้าคนกรอกในกะเดียวกันเยอะ (เกิน 4 คน) แบ่งเป็น 2 คอลัมน์ย่อยในพื้นที่กะนั้น
+    // กันคอลัมน์สูงจนล้นหน้ากระดาษ — ลายเซ็น/ตัวอักษรจะเล็กลงนิดหน่อยเป็นการแลกเปลี่ยน
+    const subCols = contributors.length > 4 ? 2 : 1;
+    const subColW = shiftColW / subCols;
+    const perSubCol = Math.ceil(contributors.length / subCols);
+    const sigW = subCols > 1 ? 46 : 62, sigH = subCols > 1 ? 16 : 22;
+    const rowH = subCols > 1 ? 22 : 28;
+    const nameFontSize = subCols > 1 ? 7.5 : 9;
+
+    let localBottom = y + 14;
+    for (let sc = 0; sc < subCols; sc++) {
+      let cy = y + 14;
+      const cx = shiftX + sc * subColW;
+      const sliceStart = sc * perSubCol;
+      const sliceEnd = Math.min(sliceStart + perSubCol, contributors.length);
+      for (let ci = sliceStart; ci < sliceEnd; ci++) {
+        const c = contributors[ci];
+        if (c.signature_data) {
+          try { doc.addImage(c.signature_data, 'PNG', cx, cy - (sigH * 0.6), sigW, sigH); } catch (e) { /* ข้ามถ้าภาพเสีย */ }
+        }
+        doc.setFont('Sarabun', 'normal'); doc.setFontSize(nameFontSize); doc.setTextColor(40,40,40);
+        const nameLines = doc.splitTextToSize(c.emp_name || '', subColW - sigW - 6);
+        doc.text(nameLines[0] || '', cx + sigW + 4, cy);
+        cy += rowH;
+      }
+      localBottom = Math.max(localBottom, cy);
+    }
+    maxBottom = Math.max(maxBottom, localBottom);
   });
+  return maxBottom;
 }
 
 function exportProductionDayPDF(reportType, dateStr) {
