@@ -875,6 +875,13 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
   </div>
 
   <div class="subview active" id="prodHistTabList">
+    <div class="prod-hist-card" style="border-color:var(--accent);">
+      <div class="prod-hist-title">📦 Export รายงานรวมทั้งวัน (ทุกฟอร์ม 3 ใบ ในไฟล์เดียว)</div>
+      <div class="two-col">
+        <div class="field" style="margin-bottom:0;"><label>วันที่</label><input type="date" id="prodAllDate"></div>
+        <button class="save-std-btn" id="prodExportAllBtn" style="align-self:flex-end; margin-top:0;">📄 Export PDF รวม</button>
+      </div>
+    </div>
     <div class="filter-bar">
       <select id="prodHistFormFilter">
         <option value="">ทุกฟอร์ม</option>
@@ -4346,6 +4353,7 @@ function initProductionModule() {
     const fmt = d => d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
     document.getElementById('prodChartToDate').value = fmt(today);
     document.getElementById('prodChartFromDate').value = fmt(weekAgo);
+    document.getElementById('prodAllDate').value = currentProdWorkDateStr();
     populateProdChartSeriesSelect();
   }
   updateLoggedInAsDisplays();
@@ -4472,7 +4480,8 @@ function ixToggleHtml(sectionId, rowKey, colKey, val) {
 function escAttr(s) { return String(s).replace(/"/g,'&quot;'); }
 
 function renderProdSectionEdit(sec, shift) {
-  let html = '<div class="prod-section-title">' + escapeHtml(sec.rowHeader) +
+  const legendNote = sec.type === 'checklist5' ? ' <span class="pnote">(I = ปกติ , X = ผิดปกติ)</span>' : '';
+  let html = '<div class="prod-section-title">' + escapeHtml(sec.rowHeader) + legendNote +
     ' <span class="pnote">— กะ' + PROD_SHIFT_LABEL[shift] + '</span></div>';
   html += '<div class="prod-grid-wrap"><table class="prod-grid"><thead>';
 
@@ -4935,7 +4944,8 @@ document.querySelectorAll('#view-production-history .chip[data-histtab]').forEac
 function prodViewCellDisplay(v) { return (v === '' || v === undefined || v === null) ? '<span style="color:var(--muted);">—</span>' : escapeHtml(v); }
 
 function renderProdSectionView(sec, shiftRows) {
-  let html = '<div class="prod-section-title">' + escapeHtml(sec.rowHeader) + '</div><div class="prod-grid-wrap"><table class="prod-grid"><thead>';
+  const legendNote = sec.type === 'checklist5' ? ' <span style="font-weight:400; font-size:11px; opacity:0.85;">(I = ปกติ , X = ผิดปกติ)</span>' : '';
+  let html = '<div class="prod-section-title">' + escapeHtml(sec.rowHeader) + legendNote + '</div><div class="prod-grid-wrap"><table class="prod-grid"><thead>';
 
   if (sec.type === 'checklist5') {
     html += '<tr><th style="min-width:150px;">' + escapeHtml(sec.rowHeader) + '</th>' + sec.cols.map(c => '<th>' + escapeHtml(c) + '</th>').join('') + '</tr></thead><tbody>';
@@ -5490,7 +5500,7 @@ function drawChecklist5(doc, y, sec, shiftRows) {
   const labelW = blockW * 0.36;
   const colW = (blockW - labelW) / sec.cols.length;
 
-  const barY = pdfBar(doc, PDF_MARGIN, y, totalW, sec.rowHeader, 8);
+  const barY = pdfBar(doc, PDF_MARGIN, y, totalW, sec.rowHeader + '   (I = ปกติ , X = ผิดปกติ)', 8);
   let maxFinalY = barY;
 
   for (let b = 0; b < 4; b++) {
@@ -5777,56 +5787,109 @@ function drawPdfFooter(doc, form, shiftRows, y, scale) {
   return maxBottom;
 }
 
+function createProdPdfDoc() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+  doc.addFileToVFS('Sarabun-Regular.ttf', SARABUN_REGULAR_B64);
+  doc.addFont('Sarabun-Regular.ttf', 'Sarabun', 'normal');
+  doc.addFileToVFS('Sarabun-Bold.ttf', SARABUN_BOLD_B64);
+  doc.addFont('Sarabun-Bold.ttf', 'Sarabun', 'bold');
+  doc.setFont('Sarabun', 'normal');
+  return doc;
+}
+
+/* วาดฟอร์มเดียว (1 หน้าเสมอ ยกเว้นกรณีสุดขั้วที่หมายเหตุ+ลายเซ็นล้นจริงๆ) ลงบนหน้าปัจจุบันของ
+   doc ที่ส่งเข้ามา — แยกออกมาเป็นฟังก์ชันกลาง เพื่อให้ export ทีละฟอร์มและ export รวมหลายฟอร์ม
+   ในไฟล์เดียว ใช้ตรรกะเดียวกันเป๊ะๆ ไม่ต้องเขียนซ้ำ */
+function drawProdFormPage(doc, form, dateStr, shiftRows) {
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const totalW = pageW - PDF_MARGIN * 2;
+  let y = drawPdfHeader(doc, form, dateStr);
+  y = pdfBar(doc, PDF_MARGIN, y, totalW, form.title, 9.5);
+  form.sections.forEach(sec => { y = sectionToPdf(doc, y + 2, sec, shiftRows) + 2; });
+
+  // วัดพื้นที่ที่เหลือจริงบนหน้ากระดาษ (ไม่เดา) แล้วย่อขนาดหมายเหตุ+ลายเซ็นให้พอดีเสมอ
+  const noteLines = collectProdReportNotes(form, shiftRows);
+  const neededNotes = estimateProdNotesHeight(doc, noteLines, totalW, 7.2, 9.5);
+  const neededFooter = estimateProdFooterHeight(shiftRows, 28);
+  const available = pageH - PDF_MARGIN - y - 6;
+  const totalNeeded = neededNotes + neededFooter;
+
+  let scale = 1;
+  if (totalNeeded > available && totalNeeded > 0) {
+    scale = available / totalNeeded;
+    if (scale < 0.45) {
+      // ตารางด้านบนกินพื้นที่จนเหลือน้อยเกินกว่าจะย่อให้ยังอ่านออกได้ — กรณีนี้พบยากมาก
+      // (ต้องมีทั้งหมายเหตุเยอะมากและผู้กรอกหลายคนพร้อมกัน) ขึ้นหน้าใหม่ให้ส่วนนี้แทนการย่อจนอ่านไม่ออก
+      doc.addPage();
+      y = PDF_MARGIN;
+      scale = 1;
+    }
+  }
+
+  y = drawPdfNotes(doc, y, noteLines, scale);
+  drawPdfFooter(doc, form, shiftRows, y, scale);
+}
+
+function shiftRowsForForm(rows, reportType) {
+  const shiftRows = { A: null, B: null, C: null };
+  rows.filter(r => r.report_type === reportType).forEach(r => { shiftRows[r.shift] = r; });
+  return shiftRows;
+}
+
 function exportProductionDayPDF(reportType, dateStr) {
   const form = PROD_FORMS[reportType];
   if (!form) return;
   const rows = prodHistoryRowsRaw.filter(r => r.report_type === reportType && r.report_date === dateStr);
-  const shiftRows = { A: null, B: null, C: null };
-  rows.forEach(r => { shiftRows[r.shift] = r; });
+  const shiftRows = shiftRowsForForm(rows, reportType);
 
   try {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
-    doc.addFileToVFS('Sarabun-Regular.ttf', SARABUN_REGULAR_B64);
-    doc.addFont('Sarabun-Regular.ttf', 'Sarabun', 'normal');
-    doc.addFileToVFS('Sarabun-Bold.ttf', SARABUN_BOLD_B64);
-    doc.addFont('Sarabun-Bold.ttf', 'Sarabun', 'bold');
-    doc.setFont('Sarabun', 'normal');
-
-    const pageW = doc.internal.pageSize.getWidth();
-    const pageH = doc.internal.pageSize.getHeight();
-    const totalW = pageW - PDF_MARGIN * 2;
-    let y = drawPdfHeader(doc, form, dateStr);
-    y = pdfBar(doc, PDF_MARGIN, y, totalW, form.title, 9.5);
-    form.sections.forEach(sec => { y = sectionToPdf(doc, y + 2, sec, shiftRows) + 2; });
-
-    // วัดพื้นที่ที่เหลือจริงบนหน้ากระดาษ (ไม่เดา) แล้วย่อขนาดหมายเหตุ+ลายเซ็นให้พอดีเสมอ
-    const noteLines = collectProdReportNotes(form, shiftRows);
-    const neededNotes = estimateProdNotesHeight(doc, noteLines, totalW, 7.2, 9.5);
-    const neededFooter = estimateProdFooterHeight(shiftRows, 28);
-    const available = pageH - PDF_MARGIN - y - 6;
-    const totalNeeded = neededNotes + neededFooter;
-
-    let scale = 1;
-    if (totalNeeded > available && totalNeeded > 0) {
-      scale = available / totalNeeded;
-      if (scale < 0.45) {
-        // ตารางด้านบนกินพื้นที่จนเหลือน้อยเกินกว่าจะย่อให้ยังอ่านออกได้ — กรณีนี้พบยากมาก
-        // (ต้องมีทั้งหมายเหตุเยอะมากและผู้กรอกหลายคนพร้อมกัน) ขึ้นหน้าใหม่ให้ส่วนนี้แทนการย่อจนอ่านไม่ออก
-        doc.addPage();
-        y = PDF_MARGIN;
-        scale = 1;
-      }
-    }
-
-    y = drawPdfNotes(doc, y, noteLines, scale);
-    drawPdfFooter(doc, form, shiftRows, y, scale);
-
+    const doc = createProdPdfDoc();
+    drawProdFormPage(doc, form, dateStr, shiftRows);
     doc.save(form.key + '_' + dateStr + '.pdf');
   } catch (err) {
     alert('สร้าง PDF ไม่สำเร็จ: ' + (err.message || err));
   }
 }
+
+/* Export รวมทั้งวัน — รวมทั้ง 3 ฟอร์ม (5,2 / 4,6 / 3) ของวันเดียวกันเป็น PDF ไฟล์เดียว
+   3 หน้า (ฟอร์มละ 1 หน้า ตามลำดับ) ดึงข้อมูลสดจาก DB เสมอ ไม่พึ่งรายการที่โหลดไว้ในหน้าประวัติ
+   เพื่อให้ export วันที่ไหนก็ได้แม้จะไม่ได้อยู่ในช่วงตัวกรองที่เลือกอยู่ตอนนี้ */
+function exportAllFormsDayPDF(dateStr) {
+  const btn = document.getElementById('prodExportAllBtn');
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'กำลังสร้าง...'; }
+
+  withRetry(() => getSbClient().from('production_reports').select('*')
+    .eq('report_date', dateStr).eq('is_active', true)
+  ).then(({ data, error }) => {
+    if (btn) { btn.disabled = false; btn.textContent = orig; }
+    if (error) { alert('โหลดข้อมูลไม่สำเร็จ: ' + error.message); return; }
+    const allRows = data || [];
+    if (!allRows.length) { alert('ไม่พบข้อมูลผลผลิตของวันที่ ' + fmtProdDateShort(dateStr) + ' เลยสักฟอร์ม'); return; }
+    try {
+      const doc = createProdPdfDoc();
+      Object.keys(PROD_FORMS).forEach((key, idx) => {
+        const form = PROD_FORMS[key];
+        const shiftRows = shiftRowsForForm(allRows, key);
+        if (idx > 0) doc.addPage();
+        drawProdFormPage(doc, form, dateStr, shiftRows);
+      });
+      doc.save('รายงานผลผลิตรวม_' + dateStr + '.pdf');
+    } catch (err) {
+      alert('สร้าง PDF รวมไม่สำเร็จ: ' + (err.message || err));
+    }
+  }).catch(err => {
+    if (btn) { btn.disabled = false; btn.textContent = orig; }
+    alert('เชื่อมต่อไม่ได้: ' + (err.message || err));
+  });
+}
+document.getElementById('prodExportAllBtn').addEventListener('click', function() {
+  const dateStr = document.getElementById('prodAllDate').value;
+  if (!dateStr) { alert('กรุณาเลือกวันที่'); return; }
+  exportAllFormsDayPDF(dateStr);
+});
 
 
 function init() {
