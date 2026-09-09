@@ -187,6 +187,18 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
   .daily-zone-header.note-header { color:#8A6415; }
   .daily-zone-count.note-count { color:#8A6415; background:#FBF0DC; }
   .daily-compact-desc.note-desc { color:#8A6415; }
+  .daily-issue-row { display:flex; align-items:center; gap:8px; padding:7px 0; font-size:12.5px; border-bottom:1px dashed var(--border); cursor:pointer; }
+  .daily-issue-row:last-child { border-bottom:none; }
+  .daily-issue-row .daily-compact-comp { flex-shrink:0; }
+  .daily-issue-row .daily-compact-desc { flex:1; min-width:0; }
+  .daily-issue-count { flex-shrink:0; font-size:10.5px; font-weight:700; color:var(--red); background:var(--red-soft); padding:2px 8px; border-radius:20px; white-space:nowrap; }
+  .daily-issue-arrow { flex-shrink:0; font-size:10px; color:var(--muted); transition:transform 0.15s; }
+  .daily-issue-arrow.open { transform:rotate(180deg); }
+  .daily-issue-detail { display:none; padding:4px 0 8px 0; margin-left:4px; border-left:2px solid var(--border); padding-left:10px; }
+  .daily-issue-detail.open { display:block; }
+  .daily-issue-occurrence { display:flex; gap:8px; font-size:11.5px; color:var(--muted); padding:3px 0; }
+  .daily-issue-occurrence .t { flex-shrink:0; width:38px; }
+  .daily-issue-occurrence .v { flex:1; min-width:0; }
 
   .std-editor-card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; box-shadow:var(--shadow); }
   .std-row { display:grid; grid-template-columns:1fr 70px 70px; gap:8px; align-items:center; margin-bottom:10px; }
@@ -1843,10 +1855,10 @@ const ABNORMAL_CHECK_LIST = [
 function computeAbnormal(r) {
   const hasNote = !!(r.note && String(r.note).trim() !== '');
   // เครื่องที่บันทึกว่า "หยุดเดิน" ไม่ต้องเทียบค่ามาตรฐานเลย (ไม่มีค่าให้เทียบอยู่แล้ว) ไม่ถือเป็นผิดปกติ
-  if (r.is_stopped) return { isAbnormal: false, hasNote: hasNote, list: [] };
+  if (r.is_stopped) return { isAbnormal: false, hasNote: hasNote, list: [], entries: [] };
 
   const comp = compressorsById[r.compressor_id];
-  const list = [];
+  const entries = []; // เก็บแบบแยกฟิลด์+ทิศทาง (ไม่ฝังค่าตัวเลขในคีย์) ไว้ใช้จัดกลุ่ม "ปัญหาเดียวกัน" ข้ามหลายรอบตรวจ
   ABNORMAL_CHECK_LIST.forEach(pc => {
     const field = pc[0], minKey = pc[1], maxKey = pc[2], label = pc[3];
     const val = r[field];
@@ -1858,13 +1870,14 @@ function computeAbnormal(r) {
     const hasMin = min !== '' && min !== null && min !== undefined;
     const hasMax = max !== '' && max !== null && max !== undefined;
     if (hasMin && num < Number(min)) {
-      list.push(label + ': ' + num + ' (ต่ำกว่ามาตรฐาน ' + min + (hasMax ? '-' + max : '') + ')');
+      entries.push({ key: field + '_low', label: label, dirText: 'ต่ำกว่ามาตรฐาน ' + min + (hasMax ? '-' + max : ''), value: num });
     } else if (hasMax && num > Number(max)) {
-      list.push(label + ': ' + num + ' (สูงกว่ามาตรฐาน ' + (hasMin ? min + '-' : '') + max + ')');
+      entries.push({ key: field + '_high', label: label, dirText: 'สูงกว่ามาตรฐาน ' + (hasMin ? min + '-' : '') + max, value: num });
     }
   });
+  const list = entries.map(e => e.label + ': ' + e.value + ' (' + e.dirText + ')');
   // "ผิดปกติ" (แดง) นับเฉพาะกรณีมีค่าเกินมาตรฐานจริงเท่านั้น — มีโน้ต/คอมเมนต์เฉยๆ โดยไม่มีค่าเกิน จะไม่ถูกนับเป็นผิดปกติ (ไปอยู่กลุ่ม "มีหมายเหตุ" สีเหลืองแทน)
-  return { isAbnormal: list.length > 0, hasNote: hasNote, list: list };
+  return { isAbnormal: entries.length > 0, hasNote: hasNote, list: list, entries: entries };
 }
 
 function isAbnormalRow(r) { return computeAbnormal(r).isAbnormal; }
@@ -2088,15 +2101,6 @@ document.querySelectorAll('.subtabs .subtab').forEach(tab => {
 });
 
 // ---- รายงานประจำวัน (เมื่อวานนี้) ----
-function shortAbnormalSummary(r) {
-  const computed = computeAbnormal(r);
-  let text = computed.list.join(', ');
-  if (r.note && String(r.note).trim()) text = text ? (text + ' • ' + String(r.note).trim()) : String(r.note).trim();
-  if (!text) text = 'มีการบันทึกความผิดปกติ';
-  if (text.length > 90) text = text.slice(0, 90) + '…';
-  return text;
-}
-
 function renderDailyReport() {
   const now = new Date();
   const yStart = new Date(now); yStart.setDate(now.getDate()-1); yStart.setHours(0,0,0,0);
@@ -2111,25 +2115,45 @@ function renderDailyReport() {
     const abnormalItems = dayItems.filter(r => getReadingKind(r) === 'abnormal');
     const noteItems = dayItems.filter(r => getReadingKind(r) === 'note');
 
+    // ยุบรวม "ปัญหาเดียวกัน" (เครื่องเดิม + พารามิเตอร์เดิม + ทิศทางเดิม) ที่เกิดซ้ำหลายรอบในวันเดียวกัน
+    // ให้นับเป็น 1 ปัญหา พร้อมจำนวนครั้งที่เกิด — ยังกดดูรายละเอียดแต่ละครั้งได้ ไม่เสียข้อมูล
+    const issueMap = {};
+    abnormalItems.forEach(r => {
+      const computed = computeAbnormal(r);
+      computed.entries.forEach(e => {
+        const gKey = r.compressor_id + '|' + e.key;
+        if (!issueMap[gKey]) {
+          issueMap[gKey] = {
+            compId: r.compressor_id, compLabel: r.no_label,
+            paramLabel: e.label, dirText: e.dirText,
+            occurrences: []
+          };
+        }
+        issueMap[gKey].occurrences.push({ time: r.timestamp, value: e.value, note: r.note });
+      });
+    });
+    const issueList = Object.values(issueMap);
+    issueList.forEach(issue => issue.occurrences.sort((a,b) => new Date(b.time) - new Date(a.time)));
+
     const countEl = document.getElementById('dailyCount');
-    countEl.textContent = abnormalItems.length;
-    countEl.className = 'daily-summary-num' + (abnormalItems.length===0 ? ' zero' : '');
+    countEl.textContent = issueList.length;
+    countEl.className = 'daily-summary-num' + (issueList.length===0 ? ' zero' : '');
     document.getElementById('dailyLabel').textContent =
-      'ความผิดปกติที่พบเมื่อวานนี้ (' + yStart.toLocaleDateString('th-TH') + ')';
+      'ปัญหาที่พบเมื่อวานนี้ (' + yStart.toLocaleDateString('th-TH') + ') — นับเครื่อง+ปัญหาเดียวกันเป็น 1 รายการ';
 
     const listEl = document.getElementById('dailyList');
     let html = '';
 
-    if (!abnormalItems.length) {
+    if (!issueList.length) {
       html += '<div class="empty-state">✅ ไม่พบความผิดปกติเมื่อวานนี้</div>';
     } else {
       // จัดกลุ่มตามโซน/ห้อง (compressor ที่ยังไม่ได้กำหนดโซน จะรวมอยู่ท้ายสุด)
       const groups = {};
-      abnormalItems.forEach(r => {
-        const comp = compressors.find(c => String(c.id) === String(r.compressor_id));
+      issueList.forEach(issue => {
+        const comp = compressors.find(c => String(c.id) === String(issue.compId));
         const zone = (comp && comp.zone && String(comp.zone).trim()) ? String(comp.zone).trim() : 'ไม่ระบุโซน';
         if (!groups[zone]) groups[zone] = [];
-        groups[zone].push(r);
+        groups[zone].push(issue);
       });
       const zoneNames = Object.keys(groups).sort((a, b) => {
         if (a === 'ไม่ระบุโซน') return 1;
@@ -2138,17 +2162,27 @@ function renderDailyReport() {
       });
 
       html += zoneNames.map(zone => {
-        const rows = groups[zone].slice().sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        const rowsHtml = rows.map(r => {
-          const time = new Date(r.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-          return '<div class="daily-compact-row">' +
-            '<span class="daily-compact-time">' + time + '</span>' +
-            '<span class="daily-compact-comp">' + escapeHtml(r.no_label) + '</span>' +
-            '<span class="daily-compact-desc">' + escapeHtml(shortAbnormalSummary(r)) + '</span>' +
+        const issues = groups[zone].slice().sort((a, b) => new Date(b.occurrences[0].time) - new Date(a.occurrences[0].time));
+        const rowsHtml = issues.map((issue, idx) => {
+          const detailId = 'issueDetail_' + zone.replace(/[^a-zA-Zก-๙0-9]/g,'') + '_' + idx;
+          const occHtml = issue.occurrences.map(o => {
+            const time = new Date(o.time).toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' });
+            let vtext = 'ค่า: ' + o.value;
+            if (o.note && String(o.note).trim()) vtext += ' • 📝 ' + String(o.note).trim();
+            return '<div class="daily-issue-occurrence"><span class="t">' + time + '</span><span class="v">' + escapeHtml(vtext) + '</span></div>';
+          }).join('');
+          return '<div>' +
+            '<div class="daily-issue-row" data-issue-toggle="' + detailId + '">' +
+              '<span class="daily-compact-comp">' + escapeHtml(issue.compLabel) + '</span>' +
+              '<span class="daily-compact-desc">' + escapeHtml(issue.paramLabel + ' ' + issue.dirText) + '</span>' +
+              '<span class="daily-issue-count">พบ ' + issue.occurrences.length + ' ครั้ง</span>' +
+              '<span class="daily-issue-arrow">▾</span>' +
+            '</div>' +
+            '<div class="daily-issue-detail" id="' + detailId + '">' + occHtml + '</div>' +
           '</div>';
         }).join('');
         return '<div class="daily-zone-group">' +
-          '<div class="daily-zone-header">📍 ' + escapeHtml(zone) + '<span class="daily-zone-count">' + rows.length + ' รายการ</span></div>' +
+          '<div class="daily-zone-header">📍 ' + escapeHtml(zone) + '<span class="daily-zone-count">' + issues.length + ' ปัญหา</span></div>' +
           rowsHtml +
         '</div>';
       }).join('');
@@ -2171,6 +2205,15 @@ function renderDailyReport() {
     }
 
     listEl.innerHTML = html;
+
+    listEl.querySelectorAll('[data-issue-toggle]').forEach(row => {
+      row.addEventListener('click', function() {
+        const detail = document.getElementById(this.dataset.issueToggle);
+        const arrow = this.querySelector('.daily-issue-arrow');
+        const isOpen = detail.classList.toggle('open');
+        arrow.classList.toggle('open', isOpen);
+      });
+    });
   };
   loadReadings({all:true}).then(proceed).catch(proceed);
   renderWaterDailySummary(yStart, yEnd);
