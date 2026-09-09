@@ -2101,6 +2101,24 @@ document.querySelectorAll('.subtabs .subtab').forEach(tab => {
 });
 
 // ---- รายงานประจำวัน (เมื่อวานนี้) ----
+// แผนที่ emoji ต่อพารามิเตอร์ ช่วยให้กวาดสายตาแยกประเภทปัญหาได้ไวขึ้น ไม่ต้องอ่านข้อความทีละบรรทัด
+const PARAM_EMOJI = {
+  suction_pressure: '💨', discharge_pressure: '💨',
+  suction_temp: '🌡️', discharge_temp: '🌡️', oil_temp: '🌡️',
+  oil_pressure: '🛢️', oil_diff_pressure: '🛢️', oil_level_1: '🛢️', oil_level_2: '🛢️',
+  capacity: '⚙️', low_cap: '⚙️', high_cap: '⚙️',
+  motor_current: '⚡'
+};
+function issueEmoji(paramKey) {
+  const isHigh = /_high$/.test(paramKey);
+  const field = paramKey.replace(/_(high|low)$/, '');
+  return (PARAM_EMOJI[field] || '⚠️') + (isHigh ? '▲' : '▼');
+}
+function compNumberSortKey(label) {
+  const m = String(label || '').match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
+}
+
 function renderDailyReport() {
   const now = new Date();
   const yStart = new Date(now); yStart.setDate(now.getDate()-1); yStart.setHours(0,0,0,0);
@@ -2125,7 +2143,7 @@ function renderDailyReport() {
         if (!issueMap[gKey]) {
           issueMap[gKey] = {
             compId: r.compressor_id, compLabel: r.no_label,
-            paramLabel: e.label, dirText: e.dirText,
+            paramKey: e.key, paramLabel: e.label, dirText: e.dirText,
             occurrences: []
           };
         }
@@ -2162,7 +2180,14 @@ function renderDailyReport() {
       });
 
       html += zoneNames.map(zone => {
-        const issues = groups[zone].slice().sort((a, b) => new Date(b.occurrences[0].time) - new Date(a.occurrences[0].time));
+        // เรียงตามหมายเลขเครื่อง (ไม่ใช่เวลาล่าสุด) ให้ไล่ดูทีละเครื่องง่ายขึ้น — เครื่องเดียวกันหลายปัญหา
+        // จะเรียงตามชื่อพารามิเตอร์ต่อท้ายกันเป็นกลุ่มเดียว
+        const issues = groups[zone].slice().sort((a, b) => {
+          const na = compNumberSortKey(a.compLabel), nb = compNumberSortKey(b.compLabel);
+          if (na !== nb) return na - nb;
+          if (a.compLabel !== b.compLabel) return a.compLabel.localeCompare(b.compLabel, 'th');
+          return a.paramLabel.localeCompare(b.paramLabel, 'th');
+        });
         const rowsHtml = issues.map((issue, idx) => {
           const detailId = 'issueDetail_' + zone.replace(/[^a-zA-Zก-๙0-9]/g,'') + '_' + idx;
           const occHtml = issue.occurrences.map(o => {
@@ -2174,7 +2199,7 @@ function renderDailyReport() {
           return '<div>' +
             '<div class="daily-issue-row" data-issue-toggle="' + detailId + '">' +
               '<span class="daily-compact-comp">' + escapeHtml(issue.compLabel) + '</span>' +
-              '<span class="daily-compact-desc">' + escapeHtml(issue.paramLabel + ' ' + issue.dirText) + '</span>' +
+              '<span class="daily-compact-desc">' + issueEmoji(issue.paramKey) + ' ' + escapeHtml(issue.paramLabel + ' ' + issue.dirText) + '</span>' +
               '<span class="daily-issue-count">พบ ' + issue.occurrences.length + ' ครั้ง</span>' +
               '<span class="daily-issue-arrow">▾</span>' +
             '</div>' +
