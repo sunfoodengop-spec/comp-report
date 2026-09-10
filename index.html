@@ -1319,34 +1319,40 @@ function getSignaturePadDataUrl(canvasId) { return document.getElementById(canva
 function attemptLogin(empCode, password) {
   const errEl = document.getElementById('loginError');
   errEl.style.display = 'none';
-  const emp = employees.find(e => String(e.emp_code) === String(empCode).trim() && isActiveEmployee(e) && (e.department || 'SFO') === currentDepartment);
-  if (!emp) {
-    errEl.textContent = 'ไม่พบรหัสพนักงานนี้ในแผนก ' + currentDepartment;
-    errEl.style.display = 'block';
-    return;
-  }
-  const proceed = (ok) => {
-    if (!ok) {
-      errEl.textContent = 'รหัสผ่านไม่ถูกต้อง';
+  // ดึงข้อมูลพนักงานคนนี้แบบเจาะจง (รวม password_hash/signature_data) เฉพาะตอน login เท่านั้น
+  // แทนการค้นจาก employees ที่โหลดไว้ตอนแรก (ซึ่งตอนนี้ไม่มี 2 ฟิลด์นี้แล้วเพื่อลด Egress)
+  withRetry(() => getSbClient().from('employees').select('*')
+    .eq('emp_code', String(empCode).trim()).eq('department', currentDepartment).maybeSingle()
+  ).then(({ data: emp, error }) => {
+    if (error) { errEl.textContent = 'เชื่อมต่อไม่ได้: ' + error.message; errEl.style.display = 'block'; return; }
+    if (!emp || !isActiveEmployee(emp)) {
+      errEl.textContent = 'ไม่พบรหัสพนักงานนี้ในแผนก ' + currentDepartment;
       errEl.style.display = 'block';
       return;
     }
-    pendingLoginUser = emp;
-    if (!emp.password_hash || emp.must_change_password) {
-      showView('view-onboard-password');
-    } else if (!emp.signature_data) {
-      showView('view-onboard-signature');
-      initSignaturePad('onboardSigCanvas');
+    const proceed = (ok) => {
+      if (!ok) {
+        errEl.textContent = 'รหัสผ่านไม่ถูกต้อง';
+        errEl.style.display = 'block';
+        return;
+      }
+      pendingLoginUser = emp;
+      if (!emp.password_hash || emp.must_change_password) {
+        showView('view-onboard-password');
+      } else if (!emp.signature_data) {
+        showView('view-onboard-signature');
+        initSignaturePad('onboardSigCanvas');
+      } else {
+        finalizeLogin(emp);
+      }
+    };
+    if (!emp.password_hash) {
+      // ยังไม่เคยตั้งรหัสผ่านเอง — อนุญาตเฉพาะรหัสเริ่มต้นเท่านั้น
+      proceed(password === DEFAULT_EMPLOYEE_PASSWORD);
     } else {
-      finalizeLogin(emp);
+      hashPassword(password).then(h => proceed(h === emp.password_hash));
     }
-  };
-  if (!emp.password_hash) {
-    // ยังไม่เคยตั้งรหัสผ่านเอง — อนุญาตเฉพาะรหัสเริ่มต้นเท่านั้น
-    proceed(password === DEFAULT_EMPLOYEE_PASSWORD);
-  } else {
-    hashPassword(password).then(h => proceed(h === emp.password_hash));
-  }
+  }).catch(err => { errEl.textContent = 'เชื่อมต่อไม่ได้: ' + (err.message || err); errEl.style.display = 'block'; });
 }
 document.getElementById('loginSubmitBtn').addEventListener('click', () => {
   const code = document.getElementById('loginEmpCode').value.trim();
@@ -1357,7 +1363,7 @@ document.getElementById('loginSubmitBtn').addEventListener('click', () => {
 });
 
 function finalizeLogin(emp) {
-  setCurrentUser({ id: emp.id, emp_code: emp.emp_code, emp_name: emp.emp_name, department: emp.department || currentDepartment });
+  setCurrentUser({ id: emp.id, emp_code: emp.emp_code, emp_name: emp.emp_name, department: emp.department || currentDepartment, signature_data: emp.signature_data || null });
   pendingLoginUser = null;
   document.getElementById('loginEmpCode').value = '';
   document.getElementById('loginPassword').value = '';
@@ -1412,6 +1418,7 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
 });
 
 /* ---------- โปรไฟล์ของฉัน (เปลี่ยนรหัสผ่าน/ลายเซ็นได้เอง) ---------- */
+let profileEmpFull = null; // ข้อมูลเต็มของผู้ใช้ปัจจุบัน (รวม password_hash) ดึงเฉพาะตอนเปิดหน้าโปรไฟล์
 document.getElementById('profileBtn').addEventListener('click', () => {
   const u = getCurrentUser();
   if (!u) return;
@@ -1423,6 +1430,11 @@ document.getElementById('profileBtn').addEventListener('click', () => {
   document.getElementById('profileSigMsg').style.display = 'none';
   showView('view-profile');
   initSignaturePad('profileSigCanvas');
+  // ดึงข้อมูลเต็มของตัวเองแบบเจาะจง (มี password_hash) เฉพาะตอนเปิดหน้านี้ ไม่ผูกกับ employees ที่โหลดไว้แบบย่อ
+  profileEmpFull = null;
+  withRetry(() => getSbClient().from('employees').select('*').eq('id', u.id).single())
+    .then(({ data, error }) => { if (!error) profileEmpFull = data; })
+    .catch(() => {});
 });
 document.getElementById('profileBackBtn').addEventListener('click', () => showView('view-site-modules'));
 
@@ -1439,8 +1451,7 @@ document.getElementById('profilePwSaveBtn').addEventListener('click', () => {
   if (p1.length < 4) { showMsg('รหัสผ่านใหม่ต้องมีอย่างน้อย 4 ตัวอักษร', true); return; }
   if (p1 !== p2) { showMsg('รหัสผ่านใหม่ทั้งสองช่องไม่ตรงกัน', true); return; }
 
-  const emp = employees.find(e => e.id === u.id);
-  const checkOld = (emp && emp.password_hash) ? hashPassword(oldPw).then(h => h === emp.password_hash) : Promise.resolve(oldPw === DEFAULT_EMPLOYEE_PASSWORD);
+  const checkOld = (profileEmpFull && profileEmpFull.password_hash) ? hashPassword(oldPw).then(h => h === profileEmpFull.password_hash) : Promise.resolve(oldPw === DEFAULT_EMPLOYEE_PASSWORD);
   checkOld.then(ok => {
     if (!ok) { showMsg('รหัสผ่านเดิมไม่ถูกต้อง', true); return null; }
     return hashPassword(p1);
@@ -1449,8 +1460,7 @@ document.getElementById('profilePwSaveBtn').addEventListener('click', () => {
     return withRetry(() => getSbClient().from('employees').update({ password_hash: hash, must_change_password: false }).eq('id', u.id).select().single())
       .then(({ data, error }) => {
         if (error) { showMsg('บันทึกไม่สำเร็จ: ' + error.message, true); return; }
-        const idx = employees.findIndex(e => e.id === data.id);
-        if (idx !== -1) employees[idx] = data;
+        profileEmpFull = data;
         document.getElementById('profileOldPw').value = '';
         document.getElementById('profileNewPw1').value = '';
         document.getElementById('profileNewPw2').value = '';
@@ -1471,14 +1481,22 @@ document.getElementById('profileSigSaveBtn').addEventListener('click', () => {
   withRetry(() => getSbClient().from('employees').update({ signature_data: sig }).eq('id', u.id).select().single())
     .then(({ data, error }) => {
       if (error) { showMsg('บันทึกไม่สำเร็จ: ' + error.message, true); return; }
-      const idx = employees.findIndex(e => e.id === data.id);
-      if (idx !== -1) employees[idx] = data;
+      profileEmpFull = data;
+      // อัปเดตลายเซ็นที่แคชไว้ใน session ทันที เผื่อกลับไปบันทึกข้อมูลผลผลิตต่อโดยไม่ต้อง login ใหม่
+      u.signature_data = sig;
+      setCurrentUser(u);
       showMsg('✅ บันทึกลายเซ็นใหม่สำเร็จ', false);
     }).catch(err => showMsg('เชื่อมต่อไม่ได้: ' + (err.message || err), true));
 });
 
 function loadEmployees() {
-  return withRetry(() => getSbClient().from('employees').select('*').order('emp_name')).then(({data, error}) => {
+  // ดึงเฉพาะฟิลด์ที่ใช้แสดงผลทั่วไป — ไม่ดึง password_hash (ข้อมูลอ่อนไหว) และ signature_data
+  // (ภาพลายเซ็นขนาดใหญ่) ของพนักงานทุกคนมาโหลดใส่เครื่องทุกคนที่เปิดแอป เพราะแทบไม่มีใครต้องใช้
+  // ฟิลด์นี้ของคนอื่นเลย ใช้แค่ตอน login/บันทึกข้อมูลของตัวเอง ซึ่งดึงแบบเจาะจงเป็นรายคนแทน
+  // (ลด Egress ของ Supabase ลงมาก เพราะเดิมโหลดทุกคนซ้ำทุกครั้งที่เปิดแอป/รีเฟรช)
+  return withRetry(() => getSbClient().from('employees')
+    .select('id, emp_code, emp_name, department, active').order('emp_name')
+  ).then(({data, error}) => {
     if (error) throw new Error(error.message);
     employees = Array.isArray(data) ? data : [];
     updateLoggedInAsDisplays();
@@ -2124,12 +2142,7 @@ function renderDailyReport() {
   const yStart = new Date(now); yStart.setDate(now.getDate()-1); yStart.setHours(0,0,0,0);
   const yEnd = new Date(now); yEnd.setDate(now.getDate()-1); yEnd.setHours(23,59,59,999);
 
-  // ให้แน่ใจว่ามีข้อมูลย้อนหลังพอ (โหลดแบบ all ถ้าจำเป็น)
-  const proceed = () => {
-    const dayItems = readings.filter(r => {
-      const t = new Date(r.timestamp);
-      return t >= yStart && t <= yEnd;
-    });
+  const proceed = (dayItems) => {
     const abnormalItems = dayItems.filter(r => getReadingKind(r) === 'abnormal');
     const noteItems = dayItems.filter(r => getReadingKind(r) === 'note');
 
@@ -2240,7 +2253,14 @@ function renderDailyReport() {
       });
     });
   };
-  loadReadings({all:true}).then(proceed).catch(proceed);
+  // ดึงเฉพาะข้อมูล "เมื่อวานนี้" ตรงๆ จากฐานข้อมูล แทนโหลดทั้งตาราง (สูงสุด 20,000 แถว) มาแล้ว
+  // ค่อยกรองฝั่ง client แบบเดิม — ลด Egress ของ Supabase ลงมาก เพราะแท็บนี้เปิดบ่อย
+  withRetry(() => getSbClient().from('readings').select('*')
+    .gte('timestamp', yStart.toISOString()).lte('timestamp', yEnd.toISOString())
+  ).then(({ data, error }) => {
+    if (error) { proceed([]); return; }
+    proceed(data || []);
+  }).catch(() => proceed([]));
   renderWaterDailySummary(yStart, yEnd);
 }
 
@@ -4726,8 +4746,7 @@ document.getElementById('prodSubmitBtn').addEventListener('click', function() {
   const dateStr = document.getElementById('prodDateInput').value;
   if (!dateStr) { alert('กรุณาเลือกวันที่'); return; }
 
-  const empFull = employees.find(e => String(e.id) === String(loggedIn.id));
-  const signatureSnapshot = empFull ? empFull.signature_data : null;
+  const signatureSnapshot = loggedIn.signature_data || null;
 
   const existingRow = prodSubmittedRows[prodShift];
   const contributors = (existingRow && Array.isArray(existingRow.contributors)) ? existingRow.contributors.slice() : [];
@@ -4783,7 +4802,9 @@ document.getElementById('prodSubmitBtn').addEventListener('click', function() {
 let prodHistoryRowsRaw = [];
 function loadProductionHistory(opts) {
   const range = document.getElementById('prodHistRangeFilter') ? document.getElementById('prodHistRangeFilter').value : '30';
-  let q = getSbClient().from('production_reports').select('*').eq('is_active', true).order('report_date', { ascending: false });
+  // ดึงเฉพาะฟิลด์ที่ใช้แสดงการ์ดรายการ/ป้ายกะ (ไม่ดึง data/contributors/note ซึ่งมีรูปลายเซ็นฝังอยู่
+  // และหนักมาก) — หน้า "ดูฟอร์ม"/Export PDF/ย้ายข้อมูล จะดึงแบบเจาะจงเป็นวันๆ เองตอนกดใช้งานจริง
+  let q = getSbClient().from('production_reports').select('id, report_type, report_date, shift').eq('is_active', true).order('report_date', { ascending: false });
   if (range !== 'all') {
     const d = new Date(); d.setDate(d.getDate() - Number(range));
     q = q.gte('report_date', d.toISOString().slice(0,10));
@@ -4841,7 +4862,7 @@ function renderProductionHistory() {
 
   list.querySelectorAll('[data-pdf-type]').forEach(btn => {
     btn.addEventListener('click', function() {
-      exportProductionDayPDF(this.dataset.pdfType, this.dataset.pdfDate);
+      exportProductionDayPDF(this.dataset.pdfType, this.dataset.pdfDate, this);
     });
   });
   list.querySelectorAll('[data-view-type]').forEach(btn => {
@@ -5088,60 +5109,67 @@ let prodViewCurrent = null; // { reportType, dateStr } — จำไว้เผ
 function openProductionView(reportType, dateStr) {
   const form = PROD_FORMS[reportType];
   if (!form) return;
-  const rows = prodHistoryRowsRaw.filter(r => r.report_type === reportType && r.report_date === dateStr);
-  const shiftRows = { A: null, B: null, C: null };
-  rows.forEach(r => { shiftRows[r.shift] = r; });
   prodViewCurrent = { reportType, dateStr };
-
+  const content = document.getElementById('prodViewContent');
+  content.innerHTML = '<div class="loading-text">กำลังโหลด...</div>';
   document.getElementById('prodViewInfoBar').innerHTML =
     '<div><b>' + escapeHtml(form.title) + '</b><br><span style="font-size:11px;">' + escapeHtml(form.docNo) + ' — วันที่ ' + fmtProdDateShort(dateStr) + '</span></div>';
-
-  const content = document.getElementById('prodViewContent');
-  content.innerHTML = form.sections.map(sec => renderProdSectionView(sec, shiftRows)).join('');
-
-  const noteLines = collectProdReportNotes(form, shiftRows);
-  if (noteLines.length) {
-    content.innerHTML += '<div class="prod-section-title">📌 หมายเหตุเพิ่มเติม</div>' +
-      '<div class="prod-grid-wrap" style="padding:10px 14px;"><ul style="margin:0; padding-left:18px; font-size:12.5px; line-height:1.7;">' +
-      noteLines.map(l => '<li>' + escapeHtml(l) + '</li>').join('') + '</ul></div>';
-  }
-
-  let sigHtml = '<div class="prod-view-sig-row">';
-  ['A','B','C'].forEach(s => {
-    const row = shiftRows[s];
-    const contributors = (row && Array.isArray(row.contributors)) ? row.contributors : [];
-    sigHtml += '<div class="slot" style="align-items:flex-start;">';
-    sigHtml += '<div class="cap" style="font-weight:700; margin-bottom:6px;">กะ' + PROD_SHIFT_LABEL[s] + '</div>';
-    if (!contributors.length) {
-      sigHtml += '<div class="empty-sig">ยังไม่มีใครบันทึก</div>';
-    } else {
-      contributors.forEach(c => {
-        sigHtml += '<div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">';
-        sigHtml += c.signature_data ? ('<img src="' + c.signature_data + '" style="height:52px; background:var(--panel2); border-radius:4px;">') : '<div class="empty-sig" style="width:100px; height:52px; font-size:10px;">ไม่มีลายเซ็น</div>';
-        sigHtml += '<span class="cap" style="font-size:15px; font-weight:600; color:var(--text);">' + escapeHtml(c.emp_name || '') + '</span></div>';
-      });
-    }
-    if (row && isAdminUnlocked()) {
-      sigHtml += '<button type="button" class="prod-shift-del-btn" data-del-id="' + row.id + '" data-del-shift="' + s + '" style="margin-top:4px; font-size:10.5px; color:var(--red); background:none; border:1px solid var(--red); border-radius:6px; padding:3px 8px; cursor:pointer;">🗑 ลบกะนี้</button>';
-    }
-    sigHtml += '</div>';
-  });
-  sigHtml += '</div>';
-  content.innerHTML += sigHtml;
-
-  content.querySelectorAll('.prod-shift-del-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
-      if (!confirm('ยืนยันลบข้อมูลกะ' + PROD_SHIFT_LABEL[this.dataset.delShift] + ' ของวันนี้?')) return;
-      deleteProductionRows([this.dataset.delId]);
-      showView('view-production-history');
-    });
-  });
-
   showView('view-production-view');
+
+  // ดึงข้อมูลของวันนี้แบบเจาะจง (ฟอร์ม+วันที่เดียว สูงสุด 3 แถว) แทนการอ้างจาก prodHistoryRowsRaw
+  // ที่ตอนนี้โหลดมาแบบย่อ (ไม่มี data/contributors/ลายเซ็น) เพื่อลด Egress ตอนดูรายการทั่วไป
+  withRetry(() => getSbClient().from('production_reports').select('*')
+    .eq('report_type', reportType).eq('report_date', dateStr).eq('is_active', true)
+  ).then(({ data, error }) => {
+    if (error) { content.innerHTML = '<div class="empty-state">โหลดไม่สำเร็จ: ' + escapeHtml(error.message) + '</div>'; return; }
+    const rows = data || [];
+    const shiftRows = { A: null, B: null, C: null };
+    rows.forEach(r => { shiftRows[r.shift] = r; });
+
+    content.innerHTML = form.sections.map(sec => renderProdSectionView(sec, shiftRows)).join('');
+
+    const noteLines = collectProdReportNotes(form, shiftRows);
+    if (noteLines.length) {
+      content.innerHTML += '<div class="prod-section-title">📌 หมายเหตุเพิ่มเติม</div>' +
+        '<div class="prod-grid-wrap" style="padding:10px 14px;"><ul style="margin:0; padding-left:18px; font-size:12.5px; line-height:1.7;">' +
+        noteLines.map(l => '<li>' + escapeHtml(l) + '</li>').join('') + '</ul></div>';
+    }
+
+    let sigHtml = '<div class="prod-view-sig-row">';
+    ['A','B','C'].forEach(s => {
+      const row = shiftRows[s];
+      const contributors = (row && Array.isArray(row.contributors)) ? row.contributors : [];
+      sigHtml += '<div class="slot" style="align-items:flex-start;">';
+      sigHtml += '<div class="cap" style="font-weight:700; margin-bottom:6px;">กะ' + PROD_SHIFT_LABEL[s] + '</div>';
+      if (!contributors.length) {
+        sigHtml += '<div class="empty-sig">ยังไม่มีใครบันทึก</div>';
+      } else {
+        contributors.forEach(c => {
+          sigHtml += '<div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">';
+          sigHtml += c.signature_data ? ('<img src="' + c.signature_data + '" style="height:52px; background:var(--panel2); border-radius:4px;">') : '<div class="empty-sig" style="width:100px; height:52px; font-size:10px;">ไม่มีลายเซ็น</div>';
+          sigHtml += '<span class="cap" style="font-size:15px; font-weight:600; color:var(--text);">' + escapeHtml(c.emp_name || '') + '</span></div>';
+        });
+      }
+      if (row && isAdminUnlocked()) {
+        sigHtml += '<button type="button" class="prod-shift-del-btn" data-del-id="' + row.id + '" data-del-shift="' + s + '" style="margin-top:4px; font-size:10.5px; color:var(--red); background:none; border:1px solid var(--red); border-radius:6px; padding:3px 8px; cursor:pointer;">🗑 ลบกะนี้</button>';
+      }
+      sigHtml += '</div>';
+    });
+    sigHtml += '</div>';
+    content.innerHTML += sigHtml;
+
+    content.querySelectorAll('.prod-shift-del-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        if (!confirm('ยืนยันลบข้อมูลกะ' + PROD_SHIFT_LABEL[this.dataset.delShift] + ' ของวันนี้?')) return;
+        deleteProductionRows([this.dataset.delId]);
+        showView('view-production-history');
+      });
+    });
+  }).catch(err => { content.innerHTML = '<div class="empty-state">เชื่อมต่อไม่ได้: ' + escapeHtml(err.message||String(err)) + '</div>'; });
 }
 document.getElementById('prodViewBackBtn').addEventListener('click', () => showView('view-production-history'));
-document.getElementById('prodViewExportBtn').addEventListener('click', () => {
-  if (prodViewCurrent) exportProductionDayPDF(prodViewCurrent.reportType, prodViewCurrent.dateStr);
+document.getElementById('prodViewExportBtn').addEventListener('click', function() {
+  if (prodViewCurrent) exportProductionDayPDF(prodViewCurrent.reportType, prodViewCurrent.dateStr, this);
 });
 
 /* ================================================================
@@ -5199,7 +5227,7 @@ document.getElementById('prodChartGenerateBtn').addEventListener('click', functi
   const originalText = btn.textContent;
   btn.disabled = true; btn.textContent = 'กำลังโหลด...';
 
-  withRetry(() => getSbClient().from('production_reports').select('*')
+  withRetry(() => getSbClient().from('production_reports').select('report_date, shift, data')
     .eq('report_type', formKey).eq('is_active', true).gte('report_date', fromDateStr).lte('report_date', toDateStr)
     .order('report_date', { ascending: true })
   ).then(({ data, error }) => {
@@ -5906,19 +5934,30 @@ function shiftRowsForForm(rows, reportType) {
   return shiftRows;
 }
 
-function exportProductionDayPDF(reportType, dateStr) {
+function exportProductionDayPDF(reportType, dateStr, btnEl) {
   const form = PROD_FORMS[reportType];
   if (!form) return;
-  const rows = prodHistoryRowsRaw.filter(r => r.report_type === reportType && r.report_date === dateStr);
-  const shiftRows = shiftRowsForForm(rows, reportType);
+  const orig = btnEl ? btnEl.textContent : '';
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = 'กำลังสร้าง...'; }
 
-  try {
-    const doc = createProdPdfDoc();
-    drawProdFormPage(doc, form, dateStr, shiftRows);
-    doc.save(form.key + '_' + dateStr + '.pdf');
-  } catch (err) {
-    alert('สร้าง PDF ไม่สำเร็จ: ' + (err.message || err));
-  }
+  // ดึงข้อมูลของวันนี้แบบเจาะจง (ฟอร์ม+วันที่เดียว) แทนอ้างจาก prodHistoryRowsRaw ที่โหลดแบบย่อไว้
+  withRetry(() => getSbClient().from('production_reports').select('*')
+    .eq('report_type', reportType).eq('report_date', dateStr).eq('is_active', true)
+  ).then(({ data, error }) => {
+    if (btnEl) { btnEl.disabled = false; btnEl.textContent = orig; }
+    if (error) { alert('โหลดข้อมูลไม่สำเร็จ: ' + error.message); return; }
+    const shiftRows = shiftRowsForForm(data || [], reportType);
+    try {
+      const doc = createProdPdfDoc();
+      drawProdFormPage(doc, form, dateStr, shiftRows);
+      doc.save(form.key + '_' + dateStr + '.pdf');
+    } catch (err) {
+      alert('สร้าง PDF ไม่สำเร็จ: ' + (err.message || err));
+    }
+  }).catch(err => {
+    if (btnEl) { btnEl.disabled = false; btnEl.textContent = orig; }
+    alert('เชื่อมต่อไม่ได้: ' + (err.message || err));
+  });
 }
 
 /* Export รวมทั้งวัน — รวมทั้ง 3 ฟอร์ม (5,2 / 4,6 / 3) ของวันเดียวกันเป็น PDF ไฟล์เดียว
@@ -5994,10 +6033,11 @@ init();
 
 // รีเฟรชค่ามาตรฐานเครื่อง Compressor + แถบสถานะการจดเงียบๆ ทุก 5 นาที เผื่อเปิดหน้าเว็บค้างไว้นาน
 // จะได้เห็นผลอัตโนมัติโดยไม่ต้อง reload หน้าเว็บเอง (ไม่มีตัวโหลดให้เห็น ไม่รบกวนการใช้งาน)
+// หมายเหตุ: ไม่รีเฟรชประวัติผลผลิตอัตโนมัติในนี้แล้ว (ตัดออกเพื่อลด Egress ของ Supabase เพราะ
+// เดิมโหลด production_reports ซ้ำทุก 5 นาทีสำหรับทุกคนที่เปิดค้างไว้ — ตอนนี้รีเฟรชเองตอนสลับแท็บ/บันทึกข้อมูลอยู่แล้ว)
 setInterval(() => {
   loadCompressors().then(() => { renderHistory(); renderTechStatusBar(); }).catch(() => { /* เงียบไว้ ไม่รบกวนผู้ใช้ */ });
   if (waterModuleLoaded) renderWaterTechStatusBar();
-  if (prodModuleLoaded) loadProductionHistory({});
 }, 5 * 60 * 1000);
 </script>
 </body>
