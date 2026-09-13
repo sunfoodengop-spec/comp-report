@@ -600,8 +600,8 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
     <div class="filter-bar">
       <select id="histCompFilter"><option value="">ทุกเครื่อง</option></select>
       <select id="histRangeFilter">
-        <option value="7">7 วันล่าสุด</option>
-        <option value="30" selected>30 วันล่าสุด</option>
+        <option value="7" selected>7 วันล่าสุด</option>
+        <option value="30">30 วันล่าสุด</option>
         <option value="all">ทั้งหมด</option>
       </select>
     </div>
@@ -1834,12 +1834,18 @@ let histAbnFilter = 'all';
 
 function loadReadings(opts) {
   opts = opts || {};
+  const rangeSel = document.getElementById('histRangeFilter');
+  const isAll = opts.all || (!opts.days && rangeSel && rangeSel.value === 'all');
   const buildQuery = () => {
     let q = getSbClient().from('readings').select('*').order('timestamp', { ascending: false });
-    if (opts.all) {
+    if (isAll) {
       q = q.limit(20000); // กันดึงมากเกินไปแบบไม่จำกัดเลยในกรณีข้อมูลสะสมเยอะมากๆ
     } else {
-      const d = new Date(); d.setDate(d.getDate() - 30);
+      // เดิม hardcode ไว้ 30 วันเสมอไม่ว่าจะเลือกตัวกรองอะไร ทำให้ตัวเลือก "7 วันล่าสุด" ไม่มีผลจริง
+      // และทำให้ทุกครั้งที่เปิดแอปดึงข้อมูลมากเกินจำเป็น (แสดงผลจริงแค่ 200 แถวบนสุดเท่านั้น)
+      // ตอนนี้อ่านจากตัวกรองที่เลือกอยู่จริง หรือใช้ค่าที่ส่งมาจาก opts.days ถ้ามี
+      const days = opts.days || (rangeSel && rangeSel.value !== 'all' ? Number(rangeSel.value) : null) || 7;
+      const d = new Date(); d.setDate(d.getDate() - days);
       q = q.gte('timestamp', d.toISOString());
     }
     return q;
@@ -1974,7 +1980,7 @@ function renderHistory() {
 document.getElementById('histCompFilter').addEventListener('change', renderHistory);
 document.getElementById('histRangeFilter').addEventListener('change', function() {
   if (this.value === 'all') { loadReadings({all:true}); }
-  else { loadReadings({}); }
+  else { loadReadings({days: Number(this.value)}); }
 });
 document.querySelectorAll('#view-history .chip').forEach(chip => {
   chip.addEventListener('click', function() {
@@ -6014,7 +6020,7 @@ function init() {
     document.getElementById('retryConnectBtn').style.display = 'inline';
   }, 15000);
 
-  Promise.all([loadCompressors(), loadEmployees(), loadReadings({}), loadProdFormOverrides()]).then(() => {
+  Promise.all([loadCompressors(), loadEmployees(), loadReadings({days:7}), loadProdFormOverrides()]).then(() => {
     if (settled) return;
     settled = true;
     clearTimeout(timeoutId);
