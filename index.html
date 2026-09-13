@@ -612,7 +612,11 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
       <div class="chip" data-abn="stopped">เฉพาะเครื่องหยุด</div>
     </div>
     <button class="export-btn-full" id="exportFilteredBtn">📤 Export Excel (ตามตัวกรองนี้)</button>
-    <button class="export-btn-full secondary" id="exportAllByCompBtn">📤 Export ทั้งหมด (แยกชีทตามเครื่อง)</button>
+    <div class="two-col" style="margin-top:10px;">
+      <div class="field" style="margin-bottom:0;"><label>Export ทั้งหมด (แยกชีทตามเครื่อง) — จากวันที่</label><input type="date" id="exportAllFromDate"></div>
+      <div class="field" style="margin-bottom:0;"><label>ถึงวันที่</label><input type="date" id="exportAllToDate"></div>
+    </div>
+    <button class="export-btn-full secondary" id="exportAllByCompBtn" style="margin-top:8px;">📤 Export ตามช่วงวันที่ (แยกชีทตามเครื่อง)</button>
     <div id="historyList"><div class="loading-text">กำลังโหลด...</div></div>
   </div>
 
@@ -824,8 +828,8 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
   <div class="filter-bar">
     <select id="waterHistSystemFilter"><option value="">ทุกระบบ</option></select>
     <select id="waterHistRangeFilter">
-      <option value="7">7 วันล่าสุด</option>
-      <option value="30" selected>30 วันล่าสุด</option>
+      <option value="7" selected>7 วันล่าสุด</option>
+      <option value="30">30 วันล่าสุด</option>
       <option value="all">ทั้งหมด</option>
     </select>
   </div>
@@ -1177,10 +1181,38 @@ function checkConfigured() {
 }
 
 /* ================= โหลดข้อมูลเครื่อง Compressor ================= */
-function loadCompressors() {
-  return withRetry(() => getSbClient().from('compressors').select('*').order('id')).then(({data, error}) => {
-    if (error) throw new Error(error.message);
-    compressors = Array.isArray(data) ? data : [];
+/* แคชเบาๆ ใน localStorage สำหรับข้อมูลที่เปลี่ยนไม่บ่อย (รายชื่อพนักงาน/รายการเครื่อง+มาตรฐาน)
+   กันดึงซ้ำทุกครั้งที่เปิดแอป — คนอื่นอาจเห็นข้อมูลที่เพิ่งแก้ไขช้าไปสูงสุดตาม ttlMs ที่กำหนด
+   กดปุ่ม "🔄 โหลดข้อมูลใหม่" (forceRefresh=true) จะข้ามแคชแล้วดึงสดเสมอ */
+function loadCachedOrFetch(cacheKey, ttlMs, fetchFn, forceRefresh) {
+  if (!forceRefresh) {
+    try {
+      const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+      if (cached && cached.ts && (Date.now() - cached.ts < ttlMs)) return Promise.resolve(cached.data);
+    } catch (e) { /* แคชเสีย ข้ามไปดึงสดแทน */ }
+  }
+  return fetchFn().then(data => {
+    try { localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data })); } catch (e) { /* localStorage เต็ม/ปิดใช้งาน ไม่เป็นไร แค่ไม่แคช */ }
+    return data;
+  });
+}
+// เรียกทันทีหลังแก้ไข compressors/employees สำเร็จ เพื่ออัปเดตแคชให้ตรงกับของจริงทันที
+// กันไม่ให้คนที่เพิ่งแก้ไขเองเห็นข้อมูลของตัวเอง "ย้อนกลับ" เป็นค่าเก่าถ้าปิดเปิดแอปใหม่ในช่วงเวลาที่ยังไม่หมดอายุแคช
+function persistCompressorsCache() {
+  try { localStorage.setItem('cache_compressors_v1', JSON.stringify({ ts: Date.now(), data: compressors })); } catch (e) {}
+}
+function persistEmployeesCache() {
+  try { localStorage.setItem('cache_employees_v1', JSON.stringify({ ts: Date.now(), data: employees })); } catch (e) {}
+}
+
+function loadCompressors(forceRefresh) {
+  return loadCachedOrFetch('cache_compressors_v1', 20 * 60 * 1000, () =>
+    withRetry(() => getSbClient().from('compressors').select('*').order('id')).then(({data, error}) => {
+      if (error) throw new Error(error.message);
+      return Array.isArray(data) ? data : [];
+    }), forceRefresh
+  ).then(data => {
+    compressors = data;
     compressorsById = {};
     compressors.forEach(c => { compressorsById[c.id] = c; });
     populateCompressorSelects();
@@ -1489,16 +1521,20 @@ document.getElementById('profileSigSaveBtn').addEventListener('click', () => {
     }).catch(err => showMsg('เชื่อมต่อไม่ได้: ' + (err.message || err), true));
 });
 
-function loadEmployees() {
+function loadEmployees(forceRefresh) {
   // ดึงเฉพาะฟิลด์ที่ใช้แสดงผลทั่วไป — ไม่ดึง password_hash (ข้อมูลอ่อนไหว) และ signature_data
   // (ภาพลายเซ็นขนาดใหญ่) ของพนักงานทุกคนมาโหลดใส่เครื่องทุกคนที่เปิดแอป เพราะแทบไม่มีใครต้องใช้
   // ฟิลด์นี้ของคนอื่นเลย ใช้แค่ตอน login/บันทึกข้อมูลของตัวเอง ซึ่งดึงแบบเจาะจงเป็นรายคนแทน
   // (ลด Egress ของ Supabase ลงมาก เพราะเดิมโหลดทุกคนซ้ำทุกครั้งที่เปิดแอป/รีเฟรช)
-  return withRetry(() => getSbClient().from('employees')
-    .select('id, emp_code, emp_name, department, active').order('emp_name')
-  ).then(({data, error}) => {
-    if (error) throw new Error(error.message);
-    employees = Array.isArray(data) ? data : [];
+  return loadCachedOrFetch('cache_employees_v1', 20 * 60 * 1000, () =>
+    withRetry(() => getSbClient().from('employees')
+      .select('id, emp_code, emp_name, department, active').order('emp_name')
+    ).then(({data, error}) => {
+      if (error) throw new Error(error.message);
+      return Array.isArray(data) ? data : [];
+    }), forceRefresh
+  ).then(data => {
+    employees = data;
     updateLoggedInAsDisplays();
     if (document.getElementById('sub-emp').classList.contains('active')) renderEmployeeList();
   });
@@ -2040,13 +2076,22 @@ document.getElementById('exportFilteredBtn').addEventListener('click', function(
 });
 
 document.getElementById('exportAllByCompBtn').addEventListener('click', function() {
+  const fromDate = document.getElementById('exportAllFromDate').value;
+  const toDate = document.getElementById('exportAllToDate').value;
+  if (!fromDate || !toDate) { alert('กรุณาเลือกช่วงวันที่ก่อน Export (จากวันที่ / ถึงวันที่)'); return; }
   const btn = this;
+  const originalText = btn.textContent;
   btn.disabled = true; btn.textContent = 'กำลังเตรียมไฟล์...';
-  withRetry(() => getSbClient().from('readings').select('*').order('timestamp', { ascending: false }).limit(20000)).then(({ data, error }) => {
-    btn.disabled = false; btn.textContent = '📤 Export ทั้งหมด (แยกชีทตามเครื่อง)';
+  const fromTs = new Date(fromDate + 'T00:00:00').toISOString();
+  const toTs = new Date(toDate + 'T23:59:59.999').toISOString();
+  withRetry(() => getSbClient().from('readings').select('*')
+    .gte('timestamp', fromTs).lte('timestamp', toTs)
+    .order('timestamp', { ascending: false }).limit(20000)
+  ).then(({ data, error }) => {
+    btn.disabled = false; btn.textContent = originalText;
     if (error) { alert('เกิดข้อผิดพลาด: ' + error.message); return; }
     const all = data || [];
-    if (!all.length) { alert('ยังไม่มีข้อมูลในระบบ'); return; }
+    if (!all.length) { alert('ไม่พบข้อมูลในช่วงวันที่เลือก'); return; }
 
     const wb = XLSX.utils.book_new();
     const summaryWs = XLSX.utils.json_to_sheet(all.map(readingToExportRow));
@@ -2066,7 +2111,7 @@ document.getElementById('exportAllByCompBtn').addEventListener('click', function
     });
 
     XLSX.writeFile(wb, 'compressor_log_all_by_machine_' + new Date().toISOString().slice(0,10) + '.xlsx');
-  }).catch(err => { btn.disabled=false; btn.textContent='📤 Export ทั้งหมด (แยกชีทตามเครื่อง)'; alert('เชื่อมต่อไม่ได้: '+(err.message||err)); });
+  }).catch(err => { btn.disabled=false; btn.textContent=originalText; alert('เชื่อมต่อไม่ได้: '+(err.message||err)); });
 });
 
 /* ================= TAB 3: แอดมิน ================= */
@@ -2098,7 +2143,7 @@ document.getElementById('lockBtn').addEventListener('click', function() {
 document.getElementById('refreshCacheBtn').addEventListener('click', function() {
   const btn = this;
   btn.disabled = true; btn.textContent = 'กำลังโหลด...';
-  Promise.all([loadCompressors(), loadEmployees()]).then(() => {
+  Promise.all([loadCompressors(true), loadEmployees(true)]).then(() => {
     btn.disabled = false; btn.textContent = '🔄 โหลดข้อมูลใหม่';
     renderHistory();
     alert('โหลดข้อมูลล่าสุดเรียบร้อย');
@@ -2421,6 +2466,7 @@ document.getElementById('bulkApplyBtn').addEventListener('click', function() {
       if (idx !== -1) compressors[idx] = row;
       compressorsById[row.id] = row;
     });
+    persistCompressorsCache();
     alert('ตั้งค่าเรียบร้อย ' + selectedIds.length + ' เครื่อง');
     renderBulkCompList();
   }).catch(err => { btn.disabled = false; btn.textContent = originalText; alert('เชื่อมต่อไม่ได้: ' + (err.message||err)); });
@@ -2546,6 +2592,7 @@ document.getElementById('sheetSaveAllBtn').addEventListener('click', function() 
       if (idx !== -1) compressors[idx] = row;
       compressorsById[row.id] = row;
     });
+    persistCompressorsCache();
     table.querySelectorAll('.sheet-input.sheet-dirty').forEach(inp => { inp.dataset.original = inp.value; inp.classList.remove('sheet-dirty'); });
     alert('บันทึกสำเร็จทั้งหมด ' + updates.length + ' เครื่อง');
   }).catch(err => { btn.disabled = false; btn.textContent = originalText; alert('เชื่อมต่อไม่ได้: ' + (err.message||err)); });
@@ -2715,6 +2762,7 @@ document.getElementById('roundsTrackSaveBtn').addEventListener('click', function
     btn.disabled = false; btn.textContent = originalText;
     if (err) { alert('เกิดข้อผิดพลาด: ' + err.error.message); return; }
     compressors.forEach(c => { c.track_rounds = checkedIds.has(c.id); compressorsById[c.id].track_rounds = checkedIds.has(c.id); });
+    persistCompressorsCache();
     alert('บันทึกการตั้งค่าเรียบร้อย');
     renderRoundsTab();
   }).catch(err => { btn.disabled = false; btn.textContent = originalText; alert('เชื่อมต่อไม่ได้: ' + (err.message||err)); });
@@ -3270,6 +3318,7 @@ function renderStdEditor(c) {
       if (error) { alert('เกิดข้อผิดพลาด: ' + error.message); return; }
       Object.assign(c, data);
       compressorsById[c.id] = c;
+      persistCompressorsCache();
       alert('บันทึกค่ามาตรฐานเรียบร้อย');
     }).catch(err => { this.disabled=false; this.textContent='💾 บันทึกค่ามาตรฐาน'; alert('เชื่อมต่อไม่ได้: '+(err.message||err)); });
   });
@@ -3326,6 +3375,7 @@ function renderEmployeeList() {
         this.disabled = false;
         if (error) { alert('เกิดข้อผิดพลาด: ' + error.message); return; }
         emp.active = newActive;
+        persistEmployeesCache();
         renderEmployeeList();
         updateLoggedInAsDisplays();
       }).catch(err => { this.disabled=false; alert('เชื่อมต่อไม่ได้: '+(err.message||err)); });
@@ -3344,6 +3394,7 @@ function renderEmployeeList() {
           return;
         }
         emp.emp_code = newCode; emp.emp_name = newName; emp.department = newDept;
+        persistEmployeesCache();
         form.classList.remove('open');
         renderEmployeeList();
         updateLoggedInAsDisplays();
@@ -3368,6 +3419,7 @@ document.getElementById('addEmpBtn').addEventListener('click', function() {
       return;
     }
     employees.push(data);
+    persistEmployeesCache();
     codeInput.value = ''; nameInput.value = '';
     renderEmployeeList();
     updateLoggedInAsDisplays();
@@ -3633,7 +3685,7 @@ function initWaterModule() {
     const fmt = d => d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
     document.getElementById('waterChartToDate').value = fmt(today);
     document.getElementById('waterChartFromDate').value = fmt(weekAgo);
-    return loadWaterSystems().then(() => loadWaterReadings({})).catch(() => {});
+    return loadWaterSystems().then(() => loadWaterReadings({days:7})).catch(() => {});
   } else {
     renderWaterHistory();
     return Promise.resolve();
@@ -3998,12 +4050,16 @@ let waterHistFilter = 'all';
 
 function loadWaterReadings(opts) {
   opts = opts || {};
+  const rangeSel = document.getElementById('waterHistRangeFilter');
+  const isAll = opts.all || (!opts.days && rangeSel && rangeSel.value === 'all');
   const buildQuery = () => {
     let q = getSbClient().from('cold_water_readings').select('*').order('timestamp', { ascending: false });
-    if (opts.all) {
+    if (isAll) {
       q = q.limit(20000);
     } else {
-      const d = new Date(); d.setDate(d.getDate() - 30);
+      // เดิม hardcode 30 วันเสมอเหมือนฝั่ง Compressor (แก้บั๊กเดียวกัน — ตอนนี้อ่านตัวกรองที่เลือกจริง)
+      const days = opts.days || (rangeSel && rangeSel.value !== 'all' ? Number(rangeSel.value) : null) || 7;
+      const d = new Date(); d.setDate(d.getDate() - days);
       q = q.gte('timestamp', d.toISOString());
     }
     return q;
@@ -4034,7 +4090,7 @@ function renderWaterHistory() {
 
 document.getElementById('waterHistSystemFilter').addEventListener('change', renderWaterHistory);
 document.getElementById('waterHistRangeFilter').addEventListener('change', function() {
-  if (this.value === 'all') loadWaterReadings({ all:true }); else loadWaterReadings({});
+  if (this.value === 'all') loadWaterReadings({ all:true }); else loadWaterReadings({ days: Number(this.value) });
 });
 document.querySelectorAll('#view-water-history .chip').forEach(chip => {
   chip.addEventListener('click', function() {
@@ -6041,10 +6097,20 @@ init();
 // จะได้เห็นผลอัตโนมัติโดยไม่ต้อง reload หน้าเว็บเอง (ไม่มีตัวโหลดให้เห็น ไม่รบกวนการใช้งาน)
 // หมายเหตุ: ไม่รีเฟรชประวัติผลผลิตอัตโนมัติในนี้แล้ว (ตัดออกเพื่อลด Egress ของ Supabase เพราะ
 // เดิมโหลด production_reports ซ้ำทุก 5 นาทีสำหรับทุกคนที่เปิดค้างไว้ — ตอนนี้รีเฟรชเองตอนสลับแท็บ/บันทึกข้อมูลอยู่แล้ว)
-setInterval(() => {
+// เพิ่ม: หยุดรีเฟรชอัตโนมัติตอนแท็บอยู่เบื้องหลัง (ไม่ได้เปิดดูอยู่) ด้วย Page Visibility API
+// กันกรณีเปิดแท็บทิ้งไว้เป็นชั่วโมงๆ แล้วยังยิง request ทุก 5 นาทีไปเรื่อยๆ ทั้งที่ไม่มีใครดูอยู่
+// พอกลับมาเปิดแท็บอีกครั้งจะรีเฟรชให้ทันทีครั้งเดียวเพื่อให้ข้อมูลอัปเดตทัน ไม่ต้องรอรอบถัดไป
+function backgroundRefreshTick() {
   loadCompressors().then(() => { renderHistory(); renderTechStatusBar(); }).catch(() => { /* เงียบไว้ ไม่รบกวนผู้ใช้ */ });
   if (waterModuleLoaded) renderWaterTechStatusBar();
+}
+setInterval(() => {
+  if (document.hidden) return; // แท็บอยู่เบื้องหลัง ข้ามรอบนี้ไปเลย ไม่ต้องดึงข้อมูลใหม่
+  backgroundRefreshTick();
 }, 5 * 60 * 1000);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) backgroundRefreshTick(); // กลับมาเปิดแท็บอีกครั้ง รีเฟรชให้ทันทีครั้งเดียว
+});
 </script>
 </body>
 </html>
