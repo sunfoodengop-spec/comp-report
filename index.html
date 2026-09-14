@@ -4415,7 +4415,7 @@ const PROD_FORMS = {
         hours: [9,12,15,18,21,0,3,7],
         rows: [
           {l:'Air cut up (≤12)'},{l:'Air SC (≤12)'},{l:'Ante CS1 (≤0)'},
-          {l:'CS1#1 (≤ -20)'},{l:'CS1#2 (≤ -20)'},{l:'CS1 (วัดหน้างาน)'},
+          {l:'CS1#1 (≤ -20)', mergeLabel:'CS1 (≤ -20)'},{l:'CS1#2 (≤ -20)', mergeLabel:'CS1 (≤ -20)'},{l:'CS1 (วัดหน้างาน)'},
           {l:'Chill1 (0-(-2))'},{l:'Chill2 (0-(-2))'},{l:'Chill3 (0-(-2))'},{l:'Chill4 (0-(-2))'}
         ] },
       { id: 'highReceiver', type: 'highReceiver', rowHeader: 'High reciever',
@@ -4442,7 +4442,8 @@ const PROD_FORMS = {
         rows: [
           {l:'Air glyclol (≤12)'},{l:'แอร์พื้นที่ผลิตอาคารใหม่ (≤12)'},
           {l:'Chill5 (0-(-2))'},{l:'Chill7 (0-(-2))'},{l:'Chill8 (0-(-2))'},{l:'Chill9 (0-(-2))'},
-          {l:'CS2 (≤ -20)'},{l:'Double Door CS2 IN/OUT'},{l:'CS3 (≤ -20)'},
+          {l:'CS2#1 (≤ -20)', mergeLabel:'CS2 (≤ -20)'},{l:'CS2#2 (≤ -20)', mergeLabel:'CS2 (≤ -20)'},{l:'CS2#3 (≤ -20)', mergeLabel:'CS2 (≤ -20)'},
+          {l:'Double Door CS2 IN/OUT'},{l:'CS3 (≤ -20)'},
           {l:'Refill room CS3 UC11,12 (10-12C)'},{l:'Ante CS3 UC 6 (≤-10)'},{l:'Ante load CS3 UC 5 (≤-10)'},{l:'Load CS3 UC7,8 (5-7)'}
         ] },
       { id: 'freezeRoom', type: 'hourly24', rowHeader: 'อุณหภูมิห้องฟรีส',
@@ -4461,7 +4462,7 @@ const PROD_FORMS = {
         hours: [9,12,15,18,21,0,3,6],
         rows: [
           {l:'แอร์ห้องกึ๋น A (STD ≤ 12)'},{l:'แอร์ห้องกึ๋น B (STD ≤ 12)'},
-          {l:'แอร์ห้องลอกกึ๋น#1 (STD ≤ 12)'},{l:'แอร์ห้องลอกกึ๋น#2 (STD ≤ 12)'},{l:'AHU ห้องลอกกึ๋น (STD ≤ 12)'},
+          {l:'แอร์ห้องผ่ากึ๋น#1 (STD ≤ 12)', mergeLabel:'แอร์ห้องผ่ากึ๋น (STD ≤ 12)'},{l:'แอร์ห้องผ่ากึ๋น#2 (STD ≤ 12)', mergeLabel:'แอร์ห้องผ่ากึ๋น (STD ≤ 12)'},{l:'AHU ห้องผ่ากึ๋น (STD ≤ 12)'},
           {l:'ห้อง Cold A (STD (-2) - 0)'},{l:'ห้อง Cold C (STD (-2) - 0)'},
           {l:'ห้อง CCM (STD ≤ 12)'},{l:'ห้อง Chill DMC (0-(-2))'},{l:'แอร์ลาน Load chill (STD ≤ 7)'}
         ] },
@@ -5116,10 +5117,11 @@ function renderProdSectionView(sec, shiftRows) {
     html += '</tbody>';
 
   } else if (sec.type === 'hourly24' || sec.type === 'checkpoint') {
+    const displayRows = mergeRowsForReport(sec.rows);
     html += '<tr><th style="min-width:150px;">' + escapeHtml(sec.rowHeader) + '</th>' + sec.hours.map(h => '<th>' + h + ':00</th>').join('') + '</tr></thead><tbody>';
-    sec.rows.forEach(r => {
+    displayRows.forEach(r => {
       html += '<tr><td class="prod-row-label">' + escapeHtml(r.l) + '</td>' +
-        sec.hours.map(h => '<td>' + prodViewCellDisplay(mergedCellFromRows(shiftRows, prodShiftOfHour(h), sec.id, r.l, h)) + '</td>').join('') + '</tr>';
+        sec.hours.map(h => '<td>' + prodViewCellDisplay(mergedCellJoined(shiftRows, prodShiftOfHour(h), sec.id, r.memberKeys, h)) + '</td>').join('') + '</tr>';
     });
     html += '</tbody>';
 
@@ -5399,6 +5401,30 @@ function mergedCellFromRows(shiftRows, shift, sectionId, rowKey, colKey) {
   if (!row || !row.data || !row.data[sectionId] || !row.data[sectionId][rowKey]) return '';
   const v = row.data[sectionId][rowKey][colKey];
   return (v === undefined || v === null) ? '' : String(v);
+}
+
+/* บางแถวจดแยกกันตอนกรอกข้อมูล (เช่น CS1#1/CS1#2 เพราะมี 2 คอยล์ ไว้ให้เอาไปทำกราฟแยกแต่ละ
+   คอยล์ได้) แต่ตอนแสดงผลใน Report (ดูฟอร์ม/PDF) ให้รวมกลับเป็นแถวเดียว คั่นด้วย " / " เหมือน
+   ฟอร์มกระดาษต้นฉบับ — ระบุกลุ่มด้วย mergeLabel ในนิยามแถว (FORM_DEFS) ฟังก์ชันนี้ใช้เฉพาะตอน
+   render รายงานเท่านั้น ไม่กระทบหน้ากรอกข้อมูลหรือตัวเลือกกราฟที่ยังอ่านจาก sec.rows ตรงๆ */
+function mergeRowsForReport(rows) {
+  const result = [];
+  const groupMap = {};
+  rows.forEach(r => {
+    if (r.mergeLabel) {
+      let g = groupMap[r.mergeLabel];
+      if (!g) { g = { l: r.mergeLabel, memberKeys: [] }; groupMap[r.mergeLabel] = g; result.push(g); }
+      g.memberKeys.push(r.l);
+    } else {
+      result.push({ l: r.l, memberKeys: [r.l] });
+    }
+  });
+  return result;
+}
+function mergedCellJoined(shiftRows, shift, sectionId, memberKeys, colKey) {
+  const vals = memberKeys.map(k => mergedCellFromRows(shiftRows, shift, sectionId, k, colKey));
+  if (vals.every(v => v === '')) return '';
+  return vals.join(' / ');
 }
 
 /* รวมหมายเหตุทั้งหมดของวันนั้น (รวมทุกกะ) มาแสดงเป็นรายการเดียวใน Report:
@@ -5718,10 +5744,11 @@ function drawTimeTable(doc, y, sec, shiftRows) {
   const pageW = doc.internal.pageSize.getWidth();
   const totalW = pageW - PDF_MARGIN * 2;
   y = pdfBar(doc, PDF_MARGIN, y, totalW, sec.rowHeader, 8);
+  const displayRows = mergeRowsForReport(sec.rows);
   const head = [[ sec.rowHeader, ...sec.hours.map(h => h + ':00') ]];
-  const body = sec.rows.map(r => [
+  const body = displayRows.map(r => [
     r.l,
-    ...sec.hours.map(h => mergedCellFromRows(shiftRows, prodShiftOfHour(h), sec.id, r.l, h))
+    ...sec.hours.map(h => mergedCellJoined(shiftRows, prodShiftOfHour(h), sec.id, r.memberKeys, h))
   ]);
   doc.autoTable({
     startY: y, margin: { left: PDF_MARGIN, right: PDF_MARGIN }, tableWidth: totalW,
