@@ -1290,6 +1290,23 @@ function setCurrentUser(u) {
   currentUser = u;
   localStorage.setItem('session_user', JSON.stringify(u));
 }
+// เซสชันที่ login ค้างไว้ตั้งแต่ก่อนอัปเดตนี้ (ตอนแก้ Egress) จะยังไม่มี signature_data แคชไว้เลย
+// (ตอนนั้น finalizeLogin ยังไม่ได้เก็บฟิลด์นี้) ทำให้เวลาบันทึกข้อมูลผลผลิตได้ signature_data = null
+// ไปโดยไม่มีใครรู้ตัว ลายเซ็นเลยไม่ขึ้นตอน Export — ฟังก์ชันนี้เติมให้อัตโนมัติครั้งเดียวแบบเงียบๆ
+// ถ้าเซสชันไหนยังไม่มีฟิลด์นี้ (undefined) โดยไม่ต้องให้ผู้ใช้ล็อกเอาท์แล้วล็อกอินใหม่เอง
+function ensureSessionSignature() {
+  const u = getCurrentUser();
+  if (!u) return Promise.resolve(null);
+  if (u.signature_data !== undefined) return Promise.resolve(u.signature_data);
+  return withRetry(() => getSbClient().from('employees').select('signature_data').eq('id', u.id).single())
+    .then(({ data, error }) => {
+      const sig = (!error && data) ? (data.signature_data || null) : null;
+      u.signature_data = sig;
+      setCurrentUser(u);
+      return sig;
+    })
+    .catch(() => { u.signature_data = null; setCurrentUser(u); return null; });
+}
 function logoutUser() {
   currentUser = null;
   localStorage.removeItem('session_user');
@@ -4809,40 +4826,40 @@ document.getElementById('prodSubmitBtn').addEventListener('click', function() {
   const dateStr = document.getElementById('prodDateInput').value;
   if (!dateStr) { alert('กรุณาเลือกวันที่'); return; }
 
-  const signatureSnapshot = loggedIn.signature_data || null;
-
-  const existingRow = prodSubmittedRows[prodShift];
-  const contributors = (existingRow && Array.isArray(existingRow.contributors)) ? existingRow.contributors.slice() : [];
-  if (!contributors.some(c => String(c.employee_id) === String(loggedIn.id))) {
-    contributors.push({
-      employee_id: loggedIn.id,
-      emp_code: loggedIn.emp_code,
-      emp_name: loggedIn.emp_name,
-      signature_data: signatureSnapshot,
-      first_saved_at: new Date().toISOString()
-    });
-  }
-
-  const row = {
-    report_type: prodFormKey,
-    report_date: dateStr,
-    shift: prodShift,
-    department: currentDepartment || 'SFO',
-    data: prodDataByShift[prodShift],
-    note: prodNoteByShift[prodShift] || null,
-    contributors: contributors,
-    is_active: true,
-    client_request_id: 'preq_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10)
-  };
-
   const btn = this;
   const originalText = btn.textContent;
   isSubmittingProdReading = true;
   btn.disabled = true; btn.textContent = 'กำลังบันทึก...';
 
-  withRetry(() => getSbClient().from('production_reports')
-    .upsert([row], { onConflict: 'report_type,report_date,shift' }).select().single()
-  ).then(({ data, error }) => {
+  ensureSessionSignature().then(signatureSnapshot => {
+    const existingRow = prodSubmittedRows[prodShift];
+    const contributors = (existingRow && Array.isArray(existingRow.contributors)) ? existingRow.contributors.slice() : [];
+    if (!contributors.some(c => String(c.employee_id) === String(loggedIn.id))) {
+      contributors.push({
+        employee_id: loggedIn.id,
+        emp_code: loggedIn.emp_code,
+        emp_name: loggedIn.emp_name,
+        signature_data: signatureSnapshot,
+        first_saved_at: new Date().toISOString()
+      });
+    }
+
+    const row = {
+      report_type: prodFormKey,
+      report_date: dateStr,
+      shift: prodShift,
+      department: currentDepartment || 'SFO',
+      data: prodDataByShift[prodShift],
+      note: prodNoteByShift[prodShift] || null,
+      contributors: contributors,
+      is_active: true,
+      client_request_id: 'preq_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10)
+    };
+
+    return withRetry(() => getSbClient().from('production_reports')
+      .upsert([row], { onConflict: 'report_type,report_date,shift' }).select().single()
+    );
+  }).then(({ data, error }) => {
     if (error) throw new Error(error.message);
     isSubmittingProdReading = false;
     btn.disabled = false; btn.textContent = originalText;
