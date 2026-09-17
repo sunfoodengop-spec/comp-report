@@ -39,25 +39,28 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
   * { box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
   html,body { margin:0; background:var(--bg); color:var(--text); font-family:"Segoe UI","Sarabun",Tahoma,sans-serif; }
   .app { max-width:560px; margin:0 auto; min-height:100vh; padding-bottom:80px; position:relative; transition:max-width 0.15s ease; }
-  body.pc-mode .app { max-width:1180px; }
-  body.pc-mode .two-col { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-  body.pc-mode nav.bottom .navwrap { max-width:1180px; }
 
-  /* PC mode: จัดสมดุลแทนการยืดเต็มความกว้างดิบๆ — ฟอร์มคุมความกว้างพอดี จัดกลาง, รายการ์ดจัดเป็นกริดหลายคอลัมน์ */
-  body.pc-mode #view-home,
-  body.pc-mode #view-site-modules,
-  body.pc-mode #view-log,
-  body.pc-mode #view-water-log { max-width:640px; margin-left:auto; margin-right:auto; }
-  body.pc-mode #view-history,
-  body.pc-mode #view-water-history { max-width:980px; margin-left:auto; margin-right:auto; }
-  body.pc-mode #historyList,
-  body.pc-mode #waterHistoryList { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:12px; align-items:start; }
-  body.pc-mode #historyList .reading-card,
-  body.pc-mode #waterHistoryList .reading-card { margin-bottom:0; }
-  body.pc-mode .filter-bar,
-  body.pc-mode .chip-row,
-  body.pc-mode .export-btn-full { max-width:980px; margin-left:auto; margin-right:auto; }
-  body.pc-mode .export-btn-full { display:block; }
+  /* จอกว้าง (แท็บเล็ตแนวนอน/PC) ปรับ layout ให้อัตโนมัติตามขนาดจอจริง ไม่ต้องเลือกโหมดเอง
+     จัดสมดุลแทนการยืดเต็มความกว้างดิบๆ — ฟอร์มคุมความกว้างพอดี จัดกลาง, รายการ์ดจัดเป็นกริดหลายคอลัมน์ */
+  @media (min-width: 900px) {
+    .app { max-width:1180px; }
+    .two-col { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    nav.bottom .navwrap { max-width:1180px; }
+    #view-home,
+    #view-site-modules,
+    #view-log,
+    #view-water-log { max-width:640px; margin-left:auto; margin-right:auto; }
+    #view-history,
+    #view-water-history { max-width:980px; margin-left:auto; margin-right:auto; }
+    #historyList,
+    #waterHistoryList { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:12px; align-items:start; }
+    #historyList .reading-card,
+    #waterHistoryList .reading-card { margin-bottom:0; }
+    .filter-bar,
+    .chip-row,
+    .export-btn-full { max-width:980px; margin-left:auto; margin-right:auto; }
+    .export-btn-full { display:block; }
+  }
 
   header { padding:16px 16px 12px; background:linear-gradient(135deg,var(--accent),var(--accent2)); border-bottom:1px solid var(--accent); position:sticky; top:0; z-index:40; box-shadow:var(--shadow); }
   header .row { display:flex; justify-content:space-between; align-items:center; gap:8px; }
@@ -165,10 +168,12 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
   .subview { display:none; }
   .subview.active { display:block; }
 
-  /* PC mode: เมนูแอดมินกลายเป็นแถบด้านข้างคงที่ ไม่ใช่ปุ่มเรียงเต็มความกว้างอีกต่อไป */
-  body.pc-mode .admin-layout { display:flex; align-items:flex-start; gap:24px; }
-  body.pc-mode .subtabs { flex:0 0 230px; position:sticky; top:14px; margin-bottom:0; }
-  body.pc-mode .admin-content-area { flex:1; min-width:0; }
+  /* จอกว้าง: เมนูแอดมินกลายเป็นแถบด้านข้างคงที่ ไม่ใช่ปุ่มเรียงเต็มความกว้างอีกต่อไป */
+  @media (min-width: 900px) {
+    .admin-layout { display:flex; align-items:flex-start; gap:24px; }
+    .subtabs { flex:0 0 230px; position:sticky; top:14px; margin-bottom:0; }
+    .admin-content-area { flex:1; min-width:0; }
+  }
 
   .daily-summary-card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px; text-align:center; box-shadow:var(--shadow); }
   .daily-summary-num { font-size:34px; font-weight:800; color:var(--red); }
@@ -429,7 +434,6 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
       </div>
       <div style="display:flex; gap:8px;">
         <button class="icon-btn" id="homeBtn" title="หน้าแรก">🏠</button>
-        <button class="icon-btn" id="displayModeToggleBtn" title="สลับโหมดจอ">🖥</button>
         <button class="icon-btn" id="settingsBtn">⚙</button>
       </div>
     </div>
@@ -3577,19 +3581,9 @@ document.querySelectorAll('.navbtn').forEach(btn => {
 
 /* ================= Settings modal ================= */
 const settingsModal = document.getElementById('settingsModal');
-/* ================= สลับโหมดจอ มือถือ/PC ================= */
-function applyDisplayMode() {
-  const mode = localStorage.getItem('display_mode') || 'mobile';
-  document.body.classList.toggle('pc-mode', mode === 'pc');
-  document.getElementById('displayModeToggleBtn').textContent = mode === 'pc' ? '📱' : '🖥';
-  document.getElementById('displayModeToggleBtn').title = mode === 'pc' ? 'สลับเป็นโหมดมือถือ' : 'สลับเป็นโหมด PC';
-}
-document.getElementById('displayModeToggleBtn').addEventListener('click', () => {
-  const cur = localStorage.getItem('display_mode') || 'mobile';
-  localStorage.setItem('display_mode', cur === 'pc' ? 'mobile' : 'pc');
-  applyDisplayMode();
-});
-applyDisplayMode();
+/* หมายเหตุ: เดิมมีปุ่มสลับโหมดจอ มือถือ/PC ด้วยมือ ตอนนี้เปลี่ยนเป็น Auto Responsive
+   ผ่าน CSS @media query ล้วนๆ (ดูช่วงต้นของ <style>) ปรับตามความกว้างจอจริงอัตโนมัติ
+   ไม่ต้องมีปุ่ม/state ฝั่ง JS ให้จัดการอีกต่อไป */
 
 document.getElementById('settingsBtn').addEventListener('click', () => {
   showView('view-settings-tools');
