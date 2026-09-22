@@ -741,7 +741,10 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
           <div style="overflow-x:auto; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; box-shadow:var(--shadow);">
             <canvas id="trendChart" height="320"></canvas>
           </div>
-          <button class="export-btn-full" id="chartDownloadBtn" style="margin-top:12px;">💾 บันทึกภาพกราฟ (PNG ความละเอียดสูง)</button>
+          <div style="display:flex; gap:8px; margin-top:12px;">
+            <button class="export-btn-full" id="chartDownloadBtn" style="margin:0; flex:1;">💾 บันทึกภาพกราฟ (PNG)</button>
+            <button class="export-btn-full secondary" id="chartExportExcelBtn" style="margin:0; flex:1;">📊 Export Excel</button>
+          </div>
         </div>
       </div>
 
@@ -782,7 +785,10 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
           <div style="overflow-x:auto; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; box-shadow:var(--shadow);">
             <canvas id="waterTrendChart" height="300"></canvas>
           </div>
-          <button class="export-btn-full" id="waterChartDownloadBtn" style="margin-top:12px;">💾 บันทึกภาพกราฟ (PNG ความละเอียดสูง)</button>
+          <div style="display:flex; gap:8px; margin-top:12px;">
+            <button class="export-btn-full" id="waterChartDownloadBtn" style="margin:0; flex:1;">💾 บันทึกภาพกราฟ (PNG)</button>
+            <button class="export-btn-full secondary" id="waterChartExportExcelBtn" style="margin:0; flex:1;">📊 Export Excel</button>
+          </div>
         </div>
       </div>
       </div>
@@ -963,7 +969,10 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
       <div style="overflow-x:auto; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px; box-shadow:var(--shadow);">
         <canvas id="prodTrendChart" height="300"></canvas>
       </div>
-      <button class="export-btn-full" id="prodChartDownloadBtn" style="margin-top:12px;">💾 บันทึกภาพกราฟ (PNG ความละเอียดสูง)</button>
+      <div style="display:flex; gap:8px; margin-top:12px;">
+        <button class="export-btn-full" id="prodChartDownloadBtn" style="margin:0; flex:1;">💾 บันทึกภาพกราฟ (PNG)</button>
+        <button class="export-btn-full secondary" id="prodChartExportExcelBtn" style="margin:0; flex:1;">📊 Export Excel</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1114,7 +1123,7 @@ let SUPABASE_ANON_KEY = localStorage.getItem('supabase_anon_key') || DEFAULT_SUP
 // ใหม่กว่าที่เครื่องนี้กำลังรันอยู่หรือไม่ (กันเบราว์เซอร์ cache index.html เก่าค้างไว้เป็นวันๆ
 // แล้วยังบันทึกข้อมูลด้วยโค้ดรุ่นเก่าโดยไม่รู้ตัว) — ทุกครั้งที่อัปโหลดไฟล์ใหม่ขึ้น GitHub ต้อง
 // แก้ค่านี้ให้ตรงกับใน version.txt ด้วยเสมอ (ใช้วันที่+เวลาที่แก้ไขล่าสุดเป็นค่าอ้างอิงง่ายๆ)
-const APP_VERSION = '2026-09-22T09:40';
+const APP_VERSION = '2026-09-22T10:25';
 let sb = null;
 function getSbClient() {
   if (!sb) sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -3188,7 +3197,9 @@ document.getElementById('chartGenerateBtn').addEventListener('click', function()
   }).catch(err => { btn.disabled = false; btn.textContent = originalText; alert('เชื่อมต่อไม่ได้: ' + (err.message||err)); });
 });
 
+let lastTrendChartExport = null; // เก็บข้อมูลดิบของกราฟล่าสุดไว้ให้ปุ่ม Export Excel ใช้ (ไม่ query ซ้ำ ไม่กิน Egress เพิ่ม)
 function renderTrendChart(comp, selectedParams, rows) {
+  lastTrendChartExport = { comp, selectedParams, rows };
   const labels = rows.map(r => fmtDate(r.timestamp));
   const datasets = [];
   const axisUnits = { left: [], right: [] };
@@ -3282,6 +3293,20 @@ document.getElementById('chartDownloadBtn').addEventListener('click', () => {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+});
+
+document.getElementById('chartExportExcelBtn').addEventListener('click', () => {
+  if (!lastTrendChartExport) return;
+  const { comp, selectedParams, rows } = lastTrendChartExport;
+  const exportRows = rows.map(r => {
+    const row = { 'วันที่-เวลา': fmtDate(r.timestamp) };
+    selectedParams.forEach(p => { row[p.label + ' (' + p.unit + ')'] = (r[p.key] === null || r[p.key] === undefined) ? '' : r[p.key]; });
+    return row;
+  });
+  const ws = XLSX.utils.json_to_sheet(exportRows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sanitizeFilename(comp.no_label).substring(0, 31));
+  XLSX.writeFile(wb, 'trend_' + sanitizeFilename(comp.no_label) + '_' + new Date().toISOString().slice(0,10) + '.xlsx');
 });
 
 function stdField(label, minKey, maxKey, c) {
@@ -4335,7 +4360,9 @@ document.getElementById('waterChartGenerateBtn').addEventListener('click', funct
   }).catch(err => { btn.disabled=false; btn.textContent=originalText; alert('เชื่อมต่อไม่ได้: '+(err.message||err)); });
 });
 
+let lastWaterTrendExport = null; // เก็บข้อมูลดิบของกราฟล่าสุดไว้ให้ปุ่ม Export Excel ใช้ (ไม่ query ซ้ำ ไม่กิน Egress เพิ่ม)
 function renderWaterTrendChart(rows) {
+  lastWaterTrendExport = rows;
   const timestamps = Array.from(new Set(rows.map(r => r.timestamp))).sort();
   const labels = timestamps.map(t => fmtDate(t));
 
@@ -4383,6 +4410,24 @@ document.getElementById('waterChartDownloadBtn').addEventListener('click', () =>
   a.href = url;
   a.download = 'water_trend_' + new Date().toISOString().slice(0,10) + '.png';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
+});
+
+document.getElementById('waterChartExportExcelBtn').addEventListener('click', () => {
+  if (!lastWaterTrendExport || !lastWaterTrendExport.length) return;
+  const rows = lastWaterTrendExport;
+  const timestamps = Array.from(new Set(rows.map(r => r.timestamp))).sort();
+  const exportRows = timestamps.map(t => {
+    const row = { 'วันที่-เวลา': fmtDate(t) };
+    waterSystems.forEach(s => {
+      const found = rows.find(r => r.timestamp === t && String(r.system_id) === String(s.id));
+      row[s.name + ' (Q/hr)'] = found ? found.production_rate_qhr : '';
+    });
+    return row;
+  });
+  const ws = XLSX.utils.json_to_sheet(exportRows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'กำลังการผลิตน้ำเย็น');
+  XLSX.writeFile(wb, 'water_trend_' + new Date().toISOString().slice(0,10) + '.xlsx');
 });
 
 /* ================================================================
@@ -5318,6 +5363,7 @@ document.getElementById('prodChartGenerateBtn').addEventListener('click', functi
   }).catch(err => { btn.disabled=false; btn.textContent=originalText; alert('เชื่อมต่อไม่ได้: '+(err.message||err)); });
 });
 
+let lastProdTrendExport = null; // เก็บข้อมูลดิบของกราฟล่าสุดไว้ให้ปุ่ม Export Excel ใช้ (ไม่ query ซ้ำ ไม่กิน Egress เพิ่ม)
 function renderProdTrendChart(rows, series) {
   // สร้างจุดข้อมูลทีละค่าจริงตามเวลา/กะที่จดไว้จริง (ไม่เฉลี่ยรวมเป็นค่าเดียวต่อวันอีกต่อไป)
   const byDate = {};
@@ -5361,6 +5407,7 @@ function renderProdTrendChart(rows, series) {
   });
 
   points.sort((a, b) => a.sortKey - b.sortKey);
+  lastProdTrendExport = { points, series }; // เก็บไว้ให้ปุ่ม Export Excel ใช้ (ไม่ query ซ้ำ ไม่กิน Egress เพิ่ม)
 
   const ctx = document.getElementById('prodTrendChart').getContext('2d');
   if (prodTrendChartInstance) prodTrendChartInstance.destroy();
@@ -5400,6 +5447,16 @@ document.getElementById('prodChartDownloadBtn').addEventListener('click', () => 
   a.href = url;
   a.download = 'production_trend_' + new Date().toISOString().slice(0,10) + '.png';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
+});
+
+document.getElementById('prodChartExportExcelBtn').addEventListener('click', () => {
+  if (!lastProdTrendExport || !lastProdTrendExport.points.length) return;
+  const { points, series } = lastProdTrendExport;
+  const exportRows = points.map(p => ({ 'วันที่/เวลา': p.label, [series.label]: p.value }));
+  const ws = XLSX.utils.json_to_sheet(exportRows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sanitizeFilename(series.label).substring(0, 31));
+  XLSX.writeFile(wb, 'production_trend_' + sanitizeFilename(series.label) + '_' + new Date().toISOString().slice(0,10) + '.xlsx');
 });
 
 /* ================================================================
