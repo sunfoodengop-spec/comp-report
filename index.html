@@ -1110,6 +1110,11 @@ const DEFAULT_SUPABASE_URL = 'https://cidagyoawoivpagoousp.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNpZGFneW9hd29pdnBhZ29vdXNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMjQzMDMsImV4cCI6MjEwMTYwMDMwM30.tHCir-_st64bbYhbk3j5NjHpAHlkmMabHuKssLdVYEQ';
 let SUPABASE_URL = localStorage.getItem('supabase_url') || DEFAULT_SUPABASE_URL;
 let SUPABASE_ANON_KEY = localStorage.getItem('supabase_anon_key') || DEFAULT_SUPABASE_ANON_KEY;
+// ⚠️ เวอร์ชันของไฟล์นี้ — ใช้เทียบกับ version.txt (ไฟล์แยกอยู่โฟลเดอร์เดียวกัน) เพื่อรู้ว่ามีอัปเดต
+// ใหม่กว่าที่เครื่องนี้กำลังรันอยู่หรือไม่ (กันเบราว์เซอร์ cache index.html เก่าค้างไว้เป็นวันๆ
+// แล้วยังบันทึกข้อมูลด้วยโค้ดรุ่นเก่าโดยไม่รู้ตัว) — ทุกครั้งที่อัปโหลดไฟล์ใหม่ขึ้น GitHub ต้อง
+// แก้ค่านี้ให้ตรงกับใน version.txt ด้วยเสมอ (ใช้วันที่+เวลาที่แก้ไขล่าสุดเป็นค่าอ้างอิงง่ายๆ)
+const APP_VERSION = '2026-09-22T09:40';
 let sb = null;
 function getSbClient() {
   if (!sb) sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -5324,11 +5329,12 @@ function renderProdTrendChart(rows, series) {
 
   dates.forEach((d, dayIdx) => {
     byDate[d].forEach(row => {
-      if (!row.data || !row.data[series.sectionId] || !row.data[series.sectionId][series.rowKey]) return;
-      const cellObj = row.data[series.sectionId][series.rowKey];
+      if (!row.data) return;
+      // ใช้ prodResolveCellValue (รองรับ key เก่า) แทนการอ่าน row.data[...] ตรงๆ — กันกราฟขาดจุด
+      // ข้อมูลไปถ้าบางวันถูกบันทึกไว้ด้วยชื่อ key เก่า (เครื่อง/เบราว์เซอร์ cache เก่าค้างอยู่)
       if (series.colKey) {
         // ประเภทค่าต่อกะ (High Receiver / กำลังการผลิต ฯลฯ — ไม่มีคอลัมน์เวลาย่อย) จุดเดียวต่อกะ
-        const n = parseFloat(cellObj[series.colKey]);
+        const n = parseFloat(prodResolveCellValue(row.data, series.sectionId, series.rowKey, series.colKey));
         if (isNaN(n)) return;
         const shiftIdx = (SHIFT_ORDER[row.shift] !== undefined) ? SHIFT_ORDER[row.shift] : 9;
         points.push({
@@ -5338,9 +5344,9 @@ function renderProdTrendChart(rows, series) {
         });
       } else {
         // ประเภทตามคอลัมน์เวลา — แยกจุดตามทุกชั่วโมงที่มีค่าจริง เรียงตามลำดับเวลาในฟอร์ม (9,...,23,0,...,8)
-        const hoursOrder = series.hoursOrder || Object.keys(cellObj).map(Number);
+        const hoursOrder = series.hoursOrder || [];
         hoursOrder.forEach((h, hIdx) => {
-          const v = cellObj[h];
+          const v = prodResolveCellValue(row.data, series.sectionId, series.rowKey, h);
           if (v === undefined || v === null || v === '') return;
           const n = parseFloat(v);
           if (isNaN(n)) return;
@@ -5407,11 +5413,61 @@ document.getElementById('prodChartDownloadBtn').addEventListener('click', () => 
  * ================================================================ */
 const PDF_MARGIN = 20;
 
+/* ---------- รองรับ key เก่าที่บางเครื่อง/เบราว์เซอร์อาจยังบันทึกค้างไว้ (cache เก่าไม่ยอมโหลดโค้ดใหม่) ----------
+   เคสที่เจอจริง: comp_3/tempCheck เคยสะกดผิด "ลอกกึ๋น" มาก่อนจะแก้เป็น "ผ่ากึ๋น" และก่อนหน้านั้นอีกที
+   เคยรวม 2 คอยล์ไว้ช่องเดียวคั่นด้วย "/" ก่อนจะแยกเป็น #1/#2 — ถ้าเครื่องไหนยังรันโค้ดเก่าค้างอยู่
+   ข้อมูลจะถูกบันทึกด้วยชื่อเก่า ทำให้หน้ารายงาน/PDF/กราฟที่ใช้ชื่อใหม่หาไม่เจอ ฟังก์ชันนี้เลยลองไล่หา
+   ทั้งชื่อปัจจุบันและชื่อเก่าทุกแบบให้เอง ไม่ต้องพึ่งการแก้ข้อมูลในฐานข้อมูลเสมอไป (อ่านอย่างเดียว
+   ไม่กระทบข้อมูลเดิมเลย) ถ้าจะเพิ่มจุดอื่นที่เคยเปลี่ยนชื่อ key ในอนาคต เติมลง 2 ตัวแปรนี้ได้เลย */
+const PROD_LEGACY_KEY_ALIASES = {
+  tempCheck: {
+    'แอร์ห้องผ่ากึ๋น#1 (STD ≤ 12)': ['แอร์ห้องลอกกึ๋น#1 (STD ≤ 12)'],
+    'แอร์ห้องผ่ากึ๋น#2 (STD ≤ 12)': ['แอร์ห้องลอกกึ๋น#2 (STD ≤ 12)'],
+    'AHU ห้องผ่ากึ๋น (STD ≤ 12)': ['AHU ห้องลอกกึ๋น (STD ≤ 12)']
+  }
+};
+// กรณีเก่าสุด: ยังไม่เคยถูกแยกเป็น #1/#2 เลย ข้อมูลรวมอยู่ในช่องเดียวคั่นด้วย "/" (เช่น "8.3/8.2")
+const PROD_LEGACY_SPLIT_ALIASES = {
+  tempCheck: {
+    'แอร์ห้องผ่ากึ๋น#1 (STD ≤ 12)': { legacyKey: 'แอร์ห้องลอกกึ๋น (STD ≤ 12)', part: 0 },
+    'แอร์ห้องผ่ากึ๋น#2 (STD ≤ 12)': { legacyKey: 'แอร์ห้องลอกกึ๋น (STD ≤ 12)', part: 1 }
+  }
+};
+function prodResolveCellValue(data, sectionId, rowKey, colKey) {
+  const sec = data && data[sectionId];
+  if (!sec) return '';
+  // 1) ชื่อปัจจุบัน (ทางที่ควรจะเจอเกือบทุกครั้ง)
+  if (sec[rowKey]) {
+    const v = sec[rowKey][colKey];
+    if (v !== undefined && v !== null && v !== '') return String(v);
+  }
+  // 2) ชื่อเก่าที่เคย rename ตรงๆ (สะกดผิด/ชื่อเปลี่ยน แต่โครงสร้างเดิม)
+  const renameAliases = (PROD_LEGACY_KEY_ALIASES[sectionId] || {})[rowKey];
+  if (renameAliases) {
+    for (const oldKey of renameAliases) {
+      if (sec[oldKey]) {
+        const v = sec[oldKey][colKey];
+        if (v !== undefined && v !== null && v !== '') return String(v);
+      }
+    }
+  }
+  // 3) ชื่อเก่าสุดที่ยังไม่เคยแยก #1/#2 (ต้องตัด "/" เอาส่วนที่ต้องการ)
+  const splitAlias = (PROD_LEGACY_SPLIT_ALIASES[sectionId] || {})[rowKey];
+  if (splitAlias && sec[splitAlias.legacyKey]) {
+    const raw = sec[splitAlias.legacyKey][colKey];
+    if (raw !== undefined && raw !== null && raw !== '') {
+      const parts = String(raw).split('/');
+      const v = parts[splitAlias.part] !== undefined ? parts[splitAlias.part].trim() : '';
+      if (v) return v;
+    }
+  }
+  return '';
+}
+
 function mergedCellFromRows(shiftRows, shift, sectionId, rowKey, colKey) {
   const row = shiftRows[shift];
-  if (!row || !row.data || !row.data[sectionId] || !row.data[sectionId][rowKey]) return '';
-  const v = row.data[sectionId][rowKey][colKey];
-  return (v === undefined || v === null) ? '' : String(v);
+  if (!row || !row.data) return '';
+  return prodResolveCellValue(row.data, sectionId, rowKey, colKey);
 }
 
 /* บางแถวจดแยกกันตอนกรอกข้อมูล (เช่น CS1#1/CS1#2 เพราะมี 2 คอยล์ ไว้ให้เอาไปทำกราฟแยกแต่ละ
@@ -6149,6 +6205,53 @@ setInterval(() => {
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) backgroundRefreshTick(); // กลับมาเปิดแท็บอีกครั้ง รีเฟรชให้ทันทีครั้งเดียว
 });
+
+/* ================================================================
+ * ตรวจสอบเวอร์ชันของหน้าเว็บเทียบกับไฟล์ version.txt (อยู่โฟลเดอร์เดียวกับ index.html บน
+ * GitHub Pages) — ถ้าเซิร์ฟเวอร์มีเวอร์ชันใหม่กว่าที่เครื่องนี้กำลังรันอยู่ (เบราว์เซอร์ cache
+ * index.html เก่าค้างไว้เป็นวันๆ) จะโหลดหน้าใหม่ให้อัตโนมัติ กันปัญหา "จดข้อมูลด้วยโค้ดรุ่นเก่า
+ * แล้วหายไปจากรายงาน" (เช่นเคสห้องคอม 3 ที่เจอ) ไม่ให้เกิดซ้ำทุกครั้งที่มีการอัปเดตโค้ดในอนาคต
+ * - เช็คไฟล์ static เล็กๆ บน GitHub Pages เท่านั้น ไม่แตะ Supabase เลย ไม่กระทบ Egress
+ * - cache:'no-store' กัน version.txt เองโดน cache ซ้ำ (ไม่งั้นเช็คไปก็เจอค่าเก่าอยู่ดี)
+ * - แท็บซ่อนอยู่ (ไม่มีใครดู) → reload ทันทีเงียบๆ ไม่รบกวนใคร
+ * - แท็บเปิดอยู่ตรงหน้า → แจ้งเตือนก่อนแล้วนับถอยหลังค่อยรีโหลด กันข้อมูลที่กำลังกรอกอยู่หายกะทันหัน
+ * ================================================================ */
+let versionUpdateHandled = false;
+function checkAppVersion() {
+  if (versionUpdateHandled) return;
+  fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
+    .then(res => res.ok ? res.text() : null)
+    .then(text => {
+      if (!text) return;
+      const remoteVersion = text.trim();
+      if (remoteVersion && remoteVersion !== APP_VERSION) handleNewVersionDetected();
+    })
+    .catch(() => { /* เช็คไม่ได้ก็ไม่เป็นไร ลองใหม่รอบถัดไปอัตโนมัติ */ });
+}
+function handleNewVersionDetected() {
+  if (versionUpdateHandled) return;
+  versionUpdateHandled = true;
+  if (document.hidden) { location.reload(); return; }
+  showVersionUpdateBanner();
+}
+function showVersionUpdateBanner() {
+  const bar = document.createElement('div');
+  bar.style.cssText = 'position:fixed; left:0; right:0; top:0; z-index:99999; background:var(--accent); color:#fff; padding:10px 14px; font-size:13.5px; text-align:center; box-shadow:0 2px 8px rgba(0,0,0,0.25);';
+  let secondsLeft = 10;
+  bar.innerHTML = '🔄 มีการอัปเดตระบบใหม่ — กำลังโหลดหน้าใหม่ใน <span id="verCountdown">' + secondsLeft + '</span> วินาที เพื่อให้ข้อมูลที่บันทึกถูกต้องครบถ้วน ' +
+    '<button id="verReloadNowBtn" style="margin-left:10px; padding:4px 10px; border-radius:6px; border:none; background:#fff; color:var(--accent); font-weight:700; cursor:pointer;">โหลดเลย</button>';
+  document.body.appendChild(bar);
+  document.getElementById('verReloadNowBtn').addEventListener('click', () => location.reload());
+  const timer = setInterval(() => {
+    secondsLeft -= 1;
+    const el = document.getElementById('verCountdown');
+    if (el) el.textContent = secondsLeft;
+    if (secondsLeft <= 0) { clearInterval(timer); location.reload(); }
+  }, 1000);
+}
+setTimeout(checkAppVersion, 15000); // เช็คครั้งแรกหลังเปิดหน้าไปสักพัก (กันชนกับการโหลดข้อมูลตอนเปิดแอป)
+setInterval(checkAppVersion, 5 * 60 * 1000); // เช็คซ้ำทุก 5 นาที ไม่ว่าแท็บจะซ่อนอยู่หรือไม่ (ไฟล์เล็กมาก ไม่กระทบอะไร)
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkAppVersion(); });
 </script>
 </body>
 </html>
