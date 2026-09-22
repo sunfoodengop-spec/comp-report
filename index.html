@@ -500,17 +500,27 @@ const SARABUN_BOLD_B64 = 'AAEAAAAPAIAAAwBwRFNJRwAAAAEAAV7EAAAACEdERUYtZC3gAAAA/A
   <div class="view" id="view-login">
     <div class="section-title" id="loginTitle">เข้าสู่ระบบ</div>
     <div class="std-editor-card">
-      <div class="field">
-        <label>รหัสพนักงาน (Username)</label>
-        <input type="text" id="loginEmpCode" placeholder="เช่น 00123" autocomplete="username">
+      <div id="loginStep1">
+        <div class="field">
+          <label>รหัสพนักงาน (Username)</label>
+          <input type="text" id="loginEmpCode" placeholder="เช่น 00123" autocomplete="username">
+          <div style="font-size:11px; color:var(--muted); margin-top:6px;">💡 ถ้าเข้าระบบครั้งแรก หรือรหัสผ่านถูกแอดมินรีเซ็ตไว้ ระบบจะให้ตั้งรหัสผ่านใหม่ทันทีหลังกดถัดไป</div>
+        </div>
+        <div id="loginError" style="color:var(--red); font-size:12.5px; margin:6px 0; display:none;"></div>
+        <button class="save-std-btn" id="loginNextBtn">ถัดไป →</button>
       </div>
-      <div class="field">
-        <label>รหัสผ่าน (Password)</label>
-        <input type="password" id="loginPassword" placeholder="รหัสผ่านของคุณ" autocomplete="current-password">
-        <div style="font-size:11px; color:var(--muted); margin-top:6px;">💡 ถ้าเข้าระบบครั้งแรก รหัสผ่านเริ่มต้นคือ <b>123456789</b> (ระบบจะให้ตั้งรหัสใหม่ทันที)</div>
+      <div id="loginStep2" style="display:none;">
+        <div style="font-size:13px; color:var(--muted); margin-bottom:10px;">
+          รหัสพนักงาน: <b id="loginStep2NameLabel" style="color:var(--text);"></b>
+          <button type="button" id="loginBackBtn" style="margin-left:8px; font-size:11.5px; background:none; border:none; color:var(--accent); text-decoration:underline; cursor:pointer; padding:0;">เปลี่ยนรหัสพนักงาน</button>
+        </div>
+        <div class="field">
+          <label>รหัสผ่าน (Password)</label>
+          <input type="password" id="loginPassword" placeholder="รหัสผ่านของคุณ" autocomplete="current-password">
+        </div>
+        <div id="loginPwError" style="color:var(--red); font-size:12.5px; margin:6px 0; display:none;"></div>
+        <button class="save-std-btn" id="loginSubmitBtn">🔓 เข้าสู่ระบบ</button>
       </div>
-      <div id="loginError" style="color:var(--red); font-size:12.5px; margin:6px 0; display:none;"></div>
-      <button class="save-std-btn" id="loginSubmitBtn">🔓 เข้าสู่ระบบ</button>
     </div>
   </div>
 
@@ -1123,7 +1133,7 @@ let SUPABASE_ANON_KEY = localStorage.getItem('supabase_anon_key') || DEFAULT_SUP
 // ใหม่กว่าที่เครื่องนี้กำลังรันอยู่หรือไม่ (กันเบราว์เซอร์ cache index.html เก่าค้างไว้เป็นวันๆ
 // แล้วยังบันทึกข้อมูลด้วยโค้ดรุ่นเก่าโดยไม่รู้ตัว) — ทุกครั้งที่อัปโหลดไฟล์ใหม่ขึ้น GitHub ต้อง
 // แก้ค่านี้ให้ตรงกับใน version.txt ด้วยเสมอ (ใช้วันที่+เวลาที่แก้ไขล่าสุดเป็นค่าอ้างอิงง่ายๆ)
-const APP_VERSION = '2026-09-22T10:25';
+const APP_VERSION = '2026-09-22T17:48';
 let sb = null;
 function getSbClient() {
   if (!sb) sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -1382,58 +1392,80 @@ function clearSignaturePad(canvasId) {
 function signaturePadHasDrawn(canvasId) { return !!(sigPadState[canvasId] && sigPadState[canvasId].hasDrawn); }
 function getSignaturePadDataUrl(canvasId) { return document.getElementById(canvasId).toDataURL('image/png'); }
 
-/* ---------- Login ---------- */
-function attemptLogin(empCode, password) {
+/* ---------- Login (2 ขั้นตอน: กรอกรหัสพนักงานก่อน แล้วค่อยกรอกรหัสผ่าน) ----------
+   เหตุผลที่แยกเป็น 2 ขั้น: ต้องรู้ก่อนว่าคนนี้ถูกแอดมิน "รีเซ็ตรหัสผ่าน" ไว้หรือไม่ (must_change_password
+   หรือยังไม่เคยตั้งรหัสผ่านเลย password_hash เป็น null) ถ้าใช่ ให้ข้ามขั้นกรอกรหัสผ่านเดิมไปเลย เพราะ
+   ไม่มีรหัสเดิมให้กรอกอยู่แล้ว (ถูกรีเซ็ตไปแล้ว) พาไปตั้งรหัสผ่านใหม่ได้ทันที ถ้าไม่ใช่ค่อยให้กรอกรหัสผ่านตามปกติ */
+let loginLookupUser = null; // เก็บข้อมูลพนักงาน (รวม password_hash) ที่ผ่านขั้นกรอกรหัสพนักงานแล้ว ระหว่างรอกรอกรหัสผ่าน
+function resetLoginSteps() {
+  loginLookupUser = null;
+  document.getElementById('loginStep1').style.display = 'block';
+  document.getElementById('loginStep2').style.display = 'none';
+  document.getElementById('loginEmpCode').value = '';
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginError').style.display = 'none';
+  document.getElementById('loginPwError').style.display = 'none';
+}
+
+document.getElementById('loginNextBtn').addEventListener('click', function() {
+  const code = document.getElementById('loginEmpCode').value.trim();
   const errEl = document.getElementById('loginError');
   errEl.style.display = 'none';
+  if (!code) { errEl.textContent = 'กรุณากรอกรหัสพนักงาน'; errEl.style.display = 'block'; return; }
+  const btn = this;
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = 'กำลังตรวจสอบ...';
   // ดึงข้อมูลพนักงานคนนี้แบบเจาะจง (รวม password_hash/signature_data) เฉพาะตอน login เท่านั้น
   // แทนการค้นจาก employees ที่โหลดไว้ตอนแรก (ซึ่งตอนนี้ไม่มี 2 ฟิลด์นี้แล้วเพื่อลด Egress)
   withRetry(() => getSbClient().from('employees').select('*')
-    .eq('emp_code', String(empCode).trim()).eq('department', currentDepartment).maybeSingle()
+    .eq('emp_code', code).eq('department', currentDepartment).maybeSingle()
   ).then(({ data: emp, error }) => {
+    btn.disabled = false; btn.textContent = orig;
     if (error) { errEl.textContent = 'เชื่อมต่อไม่ได้: ' + error.message; errEl.style.display = 'block'; return; }
     if (!emp || !isActiveEmployee(emp)) {
       errEl.textContent = 'ไม่พบรหัสพนักงานนี้ในแผนก ' + currentDepartment;
       errEl.style.display = 'block';
       return;
     }
-    const proceed = (ok) => {
-      if (!ok) {
-        errEl.textContent = 'รหัสผ่านไม่ถูกต้อง';
-        errEl.style.display = 'block';
-        return;
-      }
+    loginLookupUser = emp;
+    if (!emp.password_hash || emp.must_change_password) {
+      // ยังไม่เคยตั้งรหัสผ่านเอง หรือถูกแอดมินรีเซ็ตไว้ — ข้ามขั้นกรอกรหัสผ่านเดิม ตั้งรหัสใหม่ได้เลย
       pendingLoginUser = emp;
-      if (!emp.password_hash || emp.must_change_password) {
-        showView('view-onboard-password');
-      } else if (!emp.signature_data) {
-        showView('view-onboard-signature');
-        initSignaturePad('onboardSigCanvas');
-      } else {
-        finalizeLogin(emp);
-      }
-    };
-    if (!emp.password_hash) {
-      // ยังไม่เคยตั้งรหัสผ่านเอง — อนุญาตเฉพาะรหัสเริ่มต้นเท่านั้น
-      proceed(password === DEFAULT_EMPLOYEE_PASSWORD);
-    } else {
-      hashPassword(password).then(h => proceed(h === emp.password_hash));
+      showView('view-onboard-password');
+      return;
     }
-  }).catch(err => { errEl.textContent = 'เชื่อมต่อไม่ได้: ' + (err.message || err); errEl.style.display = 'block'; });
-}
+    document.getElementById('loginStep2NameLabel').textContent = emp.emp_name + ' (' + emp.emp_code + ')';
+    document.getElementById('loginStep1').style.display = 'none';
+    document.getElementById('loginStep2').style.display = 'block';
+    document.getElementById('loginPassword').value = '';
+    document.getElementById('loginPassword').focus();
+  }).catch(err => { btn.disabled = false; btn.textContent = orig; errEl.textContent = 'เชื่อมต่อไม่ได้: ' + (err.message||err); errEl.style.display = 'block'; });
+});
+document.getElementById('loginBackBtn').addEventListener('click', () => resetLoginSteps());
+
 document.getElementById('loginSubmitBtn').addEventListener('click', () => {
-  const code = document.getElementById('loginEmpCode').value.trim();
   const pw = document.getElementById('loginPassword').value;
-  const errEl = document.getElementById('loginError');
-  if (!code || !pw) { errEl.textContent = 'กรุณากรอกรหัสพนักงานและรหัสผ่าน'; errEl.style.display = 'block'; return; }
-  attemptLogin(code, pw);
+  const errEl = document.getElementById('loginPwError');
+  errEl.style.display = 'none';
+  if (!loginLookupUser) { resetLoginSteps(); return; } // เผื่อ state หลุด (ไม่ควรเกิดในการใช้งานปกติ) กลับไปขั้นแรก
+  if (!pw) { errEl.textContent = 'กรุณากรอกรหัสผ่าน'; errEl.style.display = 'block'; return; }
+  const emp = loginLookupUser;
+  hashPassword(pw).then(h => {
+    if (h !== emp.password_hash) {
+      errEl.textContent = 'รหัสผ่านไม่ถูกต้อง';
+      errEl.style.display = 'block';
+      return;
+    }
+    pendingLoginUser = emp;
+    if (!emp.signature_data) { showView('view-onboard-signature'); initSignaturePad('onboardSigCanvas'); }
+    else finalizeLogin(emp);
+  });
 });
 
 function finalizeLogin(emp) {
   setCurrentUser({ id: emp.id, emp_code: emp.emp_code, emp_name: emp.emp_name, department: emp.department || currentDepartment, signature_data: emp.signature_data || null });
   pendingLoginUser = null;
-  document.getElementById('loginEmpCode').value = '';
-  document.getElementById('loginPassword').value = '';
+  resetLoginSteps();
   updateLoggedInAsDisplays();
   proceedToSiteModules(currentDepartment, true);
 }
@@ -3393,6 +3425,7 @@ function renderEmployeeList() {
         '<span class="emp-status ' + (active?'active':'inactive') + '">' + (active?'ใช้งานอยู่':'ปิดใช้งาน') + '</span></div>' +
         '<div class="emp-row-btns">' +
           '<button class="emp-btn edit-emp-btn">แก้ไข</button>' +
+          '<button class="emp-btn reset-pw-emp-btn" title="รีเซ็ตรหัสผ่าน — ครั้งหน้าที่ล็อกอิน จะถูกบังคับให้ตั้งรหัสผ่านใหม่ทันที">🔑 รีเซ็ตรหัสผ่าน</button>' +
           '<button class="emp-btn toggle-emp-btn">' + (active?'ปิดใช้งาน':'เปิดใช้งาน') + '</button>' +
         '</div>' +
       '</div>' +
@@ -3418,6 +3451,18 @@ function renderEmployeeList() {
 
     row.querySelector('.edit-emp-btn').addEventListener('click', () => form.classList.toggle('open'));
     row.querySelector('.cancel-emp-btn').addEventListener('click', () => form.classList.remove('open'));
+
+    row.querySelector('.reset-pw-emp-btn').addEventListener('click', function() {
+      if (!confirm('ยืนยันรีเซ็ตรหัสผ่านของ "' + emp.emp_name + '" (' + emp.emp_code + ')?\n\nครั้งหน้าที่คนนี้ล็อกอิน (กรอกแค่รหัสพนักงาน) ระบบจะบังคับให้ตั้งรหัสผ่านใหม่ทันที โดยไม่ต้องรู้รหัสผ่านเดิม\nลายเซ็นที่เคยบันทึกไว้จะยังอยู่เหมือนเดิม ไม่หายไปไหน')) return;
+      this.disabled = true;
+      withRetry(() => getSbClient().from('employees')
+        .update({ password_hash: null, must_change_password: true }).eq('id', emp.id).select().single()
+      ).then(({ error }) => {
+        this.disabled = false;
+        if (error) { alert('เกิดข้อผิดพลาด: ' + error.message); return; }
+        alert('✅ รีเซ็ตรหัสผ่านของ "' + emp.emp_name + '" เรียบร้อยแล้ว');
+      }).catch(err => { this.disabled = false; alert('เชื่อมต่อไม่ได้: ' + (err.message || err)); });
+    });
 
     row.querySelector('.toggle-emp-btn').addEventListener('click', function() {
       const newActive = !isActiveEmployee(emp);
@@ -3513,7 +3558,7 @@ function selectSite(dept, pushState) {
   if (!u || u.department !== dept) {
     // ยังไม่ได้ login หรือ login ไว้เป็นอีกแผนก — ต้องเข้าสู่ระบบก่อนเข้าเลือกโมดูล
     document.getElementById('loginTitle').textContent = 'เข้าสู่ระบบ — แผนก ' + dept;
-    document.getElementById('loginError').style.display = 'none';
+    resetLoginSteps();
     document.getElementById('bottomNav').style.display = 'none';
     document.querySelectorAll('.navbtn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
